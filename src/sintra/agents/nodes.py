@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from sintra.agents.factory import get_architect_llm
 from sintra.benchmarks.executor import MockExecutor  # StandaloneExecutor
 from sintra.ui.console import log_transition
@@ -102,3 +105,39 @@ def critic_router(state: SintraState) -> str:
 
     log_transition("Critic", "Performance gaps detected. Retrying...", "critic.node")
     return "continue"
+
+
+def reporter_node(state: SintraState) -> dict:
+    """
+    The Archivist: Saves the winning recipe to a JSON file using Pydantic v2 standards.
+    """
+    log_transition("Reporter", "Archiving the final 'Golden Recipe'...", "hw.profile")
+
+    successes = [e for e in state["history"] if e["metrics"].was_successful]
+
+    if not successes:
+        log_transition("Reporter", "No successful recipes to archive.", "status.fail")
+        return state
+
+    final_entry = successes[-1]
+    recipe = final_entry["recipe"]
+    metrics = final_entry["metrics"]
+
+    report_data = {
+        "hardware_profile": state["profile"].name,
+        "recipe": recipe.model_dump(),
+        "performance": {
+            "tps": metrics.actual_tps,
+            "vram_gb": metrics.actual_vram_usage,
+            "accuracy": metrics.accuracy_score,
+        },
+    }
+
+    output_path = Path("optimized_recipe.json")
+    with open(output_path, "w") as f:
+        json.dump(report_data, f, indent=4)
+
+    log_transition(
+        "Reporter", f"SUCCESS: Recipe saved to {output_path}", "status.success"
+    )
+    return state

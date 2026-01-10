@@ -2,7 +2,12 @@ import sys
 
 from langgraph.graph import END, StateGraph
 
-from sintra.agents.nodes import architect_node, benchmarker_node, critic_router
+from sintra.agents.nodes import (
+    architect_node,
+    benchmarker_node,
+    critic_router,
+    reporter_node,
+)
 from sintra.agents.state import SintraState
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import load_hardware_profile
@@ -15,6 +20,7 @@ def build_sintra_workflow():
     # Define the "Actors"
     workflow.add_node("architect", architect_node)
     workflow.add_node("benchmarker", benchmarker_node)
+    workflow.add_node("reporter", reporter_node)
 
     # Define the "Path"
     workflow.set_entry_point("architect")
@@ -26,9 +32,11 @@ def build_sintra_workflow():
         critic_router,
         {
             "continue": "architect",
-            "end": END,
+            "end": "reporter",
         },
     )
+    # reporter leads to END
+    workflow.add_edge("reporter", END)
 
     return workflow.compile()
 
