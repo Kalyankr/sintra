@@ -2,7 +2,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
-from .state import LLMConfig, LLMProvider, ModelRecipe
+from sintra.profiles.models import LLMConfig, LLMProvider, ModelRecipe
 
 
 def get_architect_llm(config: LLMConfig):

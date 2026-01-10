@@ -30,5 +30,5 @@ An autonomous **Agentic Loop** that:
 | **Env Management** | `uv` (Fast, reproducible Python environments) |
 
 
-                                                            Work in Progress
-                                                        Driven By Human Curiosity
+                                                Work in Progress
+                                            Driven By Human Curiosity

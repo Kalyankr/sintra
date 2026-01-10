@@ -15,12 +15,16 @@ dependencies = [
     "langgraph>=1.0.5",
     "optuna>=4.6.0",
     "psutil>=7.2.1",
+    "rich>=14.2.0",
     "torch>=2.9.1",
     "transformers>=4.57.3",
 ]
 
 [project.scripts]
 sintra = "sintra:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

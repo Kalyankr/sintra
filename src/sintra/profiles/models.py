@@ -4,37 +4,51 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class HardwareConstraints(BaseModel):
-    vram_gb: float = Field(..., description="Maximum available VRAM in Gigabytes")
-    cpu_arch: str = Field(..., pattern="^(x86_64|arm64)$")
-    has_cuda: bool = False
-    max_power_draw_watts: Optional[float] = None
+# LLM Architect Config
+class LLMProvider(str, Enum):
+    OPENAI = "openai"
+    ANTHROPIC = "anthropic"
+    GOOGLE = "google"
+    OLLAMA = "ollama"
 
 
-class TargetMetrics(BaseModel):
-    min_tokens_per_second: float = Field(default=5.0)
-    max_latency_ms: float = Field(default=500.0)
-    min_accuracy_score: float = Field(
-        0.7, description="Baseline MMLU or reasoning score"
-    )
+class LLMConfig(BaseModel):
+    provider: LLMProvider = LLMProvider.GOOGLE
+    model_name: str = "gpt-4o"
+    temperature: float = 0.1
+
+
+# Hardware & Target Definitions
+class Constraints(BaseModel):
+    vram_gb: float
+
+
+class Targets(BaseModel):
+    min_tokens_per_second: float
+    min_accuracy_score: float
 
 
 class HardwareProfile(BaseModel):
     name: str
-    constraints: HardwareConstraints
-    targets: TargetMetrics
-    supported_quantizations: List[str] = ["GGUF", "GPTQ", "AWQ"]
+    constraints: Constraints
+    targets: Targets
 
 
-class LLMProvider(str, Enum):
-    OPENAI = "openai"
-    ANTHROPIC = "anthropic"
-    OLLAMA = "ollama"  # For local-hosted architecting
-    GOOGLE = "google"
+# Surgery & Results
+class ModelRecipe(BaseModel):
+    """The 'Surgery' instructions proposed by the Architect."""
+
+    bits: int = Field(4, ge=2, le=8)
+    pruning_ratio: float = Field(0.0, ge=0.0, le=1.0)
+    layers_to_drop: List[int] = Field(
+        default_factory=list, description="Indices of layers to prune."
+    )
+    method: str = Field("GGUF")
 
 
-class LLMConfig(BaseModel):
-    provider: LLMProvider = LLMProvider.OPENAI
-    model_name: str = "gpt-4o"
-    temperature: float = 0.1
-    api_key_env_var: str = "OPENAI_API_KEY"
+class ExperimentResult(BaseModel):
+    actual_tps: float
+    actual_vram_usage: float
+    accuracy_score: float
+    was_successful: bool
+    error_log: Optional[str] = None
