@@ -14,8 +14,8 @@ class LLMProvider(str, Enum):
 
 class LLMConfig(BaseModel):
     provider: LLMProvider = LLMProvider.GOOGLE
-    model_name: str = "gpt-4o"
-    temperature: float = 0.1
+    model_name: str = "gemini-2.5-flash"
+    temperature: float = 0.2
 
 
 # Hardware & Target Definitions

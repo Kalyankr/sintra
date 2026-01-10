@@ -1,12 +1,79 @@
+import os
 import random
+import subprocess
 
-from ..agents.state import ExperimentResult, ModelRecipe
+from ..profiles.models import ExperimentResult, HardwareProfile, ModelRecipe
+from ..ui.console import console, log_transition
+
+
+class StandaloneExecutor:
+    def run_benchmark(
+        self, recipe: ModelRecipe, profile: HardwareProfile
+    ) -> ExperimentResult:
+        log_transition(
+            "Lab",
+            f"Starting isolated worker: {recipe.bits}-bit | {recipe.method}",
+            "lab.node",
+        )
+
+        recipe_json = recipe.model_dump_json()
+        env = os.environ.copy()
+        env["VRAM_LIMIT_GB"] = str(profile.constraints.vram_gb)
+
+        with console.status(f"[bold green]Running {recipe.method} Surgery...") as _:
+            try:
+                process = subprocess.Popen(
+                    ["uv", "run", "src/sintra/benchmarks/worker/runner.py"],
+                    env=env,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+
+                # Communicate: Send recipe, get results
+                stdout, stderr = process.communicate(input=recipe_json, timeout=600)
+
+            except subprocess.TimeoutExpired:
+                process.kill()
+                return self._error_result("Process timed out (600s limit)")
+            except Exception as e:
+                return self._error_result(f"Executor internal error: {str(e)}")
+
+        # Handle Exit Codes & Empty Outputs
+        if process.returncode != 0:
+            log_transition("Status", "Surgery process crashed.", "status.fail")
+            # Log stderr for debugging if it exists
+            return self._error_result(
+                stderr.strip() if stderr else "Unknown process crash"
+            )
+
+        if not stdout or not stdout.strip():
+            return self._error_result("Worker completed but returned no data.")
+
+        # Parse JSON Output
+        try:
+            return ExperimentResult.model_validate_json(stdout)
+        except Exception as e:
+            return self._error_result(f"Failed to parse worker output: {str(e)}")
+
+    def _error_result(self, msg: str) -> ExperimentResult:
+        """Helper to create a failed experiment result."""
+        return ExperimentResult(
+            actual_tps=0.0,
+            actual_vram_usage=0.0,
+            accuracy_score=0.0,
+            was_successful=False,
+            error_log=msg,
+        )
 
 
 class MockExecutor:
     """Simulates hardware behavior for testing the Agent's logic loop."""
 
-    def run_benchmark(self, recipe: ModelRecipe) -> ExperimentResult:
+    def run_benchmark(
+        self, recipe: ModelRecipe, profile: HardwareProfile
+    ) -> ExperimentResult:
         # Logic: Lower bits = Higher Speed, but Lower Accuracy
         # Base speed 2.0 TPS, +3.0 TPS if we use 4-bit
         speed_boost = 3.0 if recipe.bits == 4 else 0.0

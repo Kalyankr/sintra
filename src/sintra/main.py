@@ -9,6 +9,7 @@ from sintra.agents.nodes import (
     reporter_node,
 )
 from sintra.agents.state import SintraState
+from sintra.cli import parse_args
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import load_hardware_profile
 from sintra.ui.console import console, log_transition
@@ -31,8 +32,8 @@ def build_sintra_workflow():
         "benchmarker",
         critic_router,
         {
-            "continue": "architect",
-            "end": "reporter",
+            "architect": "architect",
+            "reporter": "reporter",
         },
     )
     # reporter leads to END
@@ -41,44 +42,47 @@ def build_sintra_workflow():
     return workflow.compile()
 
 
-def run_cli(profile_path: str):
-    """Entry point to initiate the agentic loop."""
+def main():
+    # Get CLI arguments
+    args = parse_args()
+
+    # Setup UI
     console.rule("[arch.node] SINTRA: Edge AI Distiller")
 
-    # Load context
-    log_transition("System", f"Loading hardware profile: {profile_path}", "hw.profile")
-    profile = load_hardware_profile(profile_path)
+    # Load Hardware Context
+    try:
+        profile = load_hardware_profile(args.profile)
+    except Exception as e:
+        console.print(f"[status.fail] Failed to load hardware profile: {e}")
+        sys.exit(1)
 
-    # Initial State Setup
+    # Initialize State
     initial_state: SintraState = {
         "profile": profile,
         "llm_config": LLMConfig(
-            provider=LLMProvider.GOOGLE, model_name="gemini-2.5-flash"
+            provider=LLMProvider(args.provider),
+            model_name=args.model,
         ),
-        "current_recipe": None,
-        "history": [],
+        "use_debug": args.debug,
         "iteration": 0,
+        "history": [],
         "is_converged": False,
+        "current_recipe": None,
     }
 
-    # Compile and Stream
+    log_transition(
+        "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
+    )
+
+    # Run Workflow
     app = build_sintra_workflow()
 
-    log_transition("System", "Starting optimization cycle...", "status.success")
-
-    # We use .stream to see the transition between nodes in real-time
-    for output in app.stream(initial_state):
-        for node_name, state_update in output.items():
-            # The UI logic is handled inside the nodes via log_transition
-            pass
+    # Streaming the graph for real-time console updates
+    for _ in app.stream(initial_state):
+        pass
 
     console.rule("[status.success] OPTIMIZATION COMPLETE")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        console.print(
-            "[status.fail] Usage: uv run python -m sintra.main profiles/pi5.yaml"
-        )
-    else:
-        run_cli(sys.argv[1])
+    main()

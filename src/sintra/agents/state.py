@@ -27,3 +27,6 @@ class SintraState(TypedDict):
     # Progress Tracking
     iteration: int
     is_converged: bool
+
+    # debug mode
+    use_debug: bool

@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 
 from sintra.agents.factory import get_architect_llm
-from sintra.benchmarks.executor import MockExecutor  # StandaloneExecutor
+from sintra.benchmarks.executor import MockExecutor, StandaloneExecutor
+from sintra.profiles.models import ModelRecipe
 from sintra.ui.console import log_transition
 
 from .state import SintraState
@@ -14,13 +15,30 @@ def architect_node(state: SintraState) -> dict:
     The Brain: Analyzes past performance and proposes the next
     compression strategy (The Recipe).
     """
-    brain = get_architect_llm(state["llm_config"])
-    profile = state["profile"]
-    history_summary = format_history_for_llm(state["history"])
 
+    # DEBUG MODE: Skip the LLM and return a fixed recipe
+    if state.get("use_debug"):
+        log_transition("Architect", "DEBUG MODE: Bypassing LLM API", "arch.node")
+
+        test_recipe = ModelRecipe(
+            bits=2,
+            pruning_ratio=0.1,
+            layers_to_drop=[],
+            method="GGUF",
+        )
+
+        return {
+            "current_recipe": test_recipe,
+            "iteration": state["iteration"] + 1,
+            "is_converged": True,
+        }
     log_transition(
         "Architect", f"Analyzing iteration {state['iteration']}...", "arch.node"
     )
+
+    brain = get_architect_llm(state["llm_config"])
+    profile = state["profile"]
+    history_summary = format_history_for_llm(state["history"])
 
     system_prompt = f"""
     You are the Sintra Architect. Your goal is to compress a large LLM for: {profile.name}.
@@ -54,18 +72,18 @@ def benchmarker_node(state: SintraState) -> dict:
     The Lab: Executes the recipe and returns physical metrics.
     """
     recipe = state["current_recipe"]
+    profile = state["profile"]
     log_transition(
         "Lab",
         f"Executing Surgery: {recipe.bits}-bit | Prune: {recipe.pruning_ratio}",
         "lab.node",
     )
-
-    # --- SWAP EXECUTORS HERE ---
-    # executor = StandaloneExecutor() # Use this for real hardware
-    executor = MockExecutor()  # Use this for testing logic
-    # ---------------------------
-
-    result = executor.run_benchmark(recipe)
+    # Use Mock if in debug mode
+    if state.get("use_debug"):
+        executor = MockExecutor()
+    else:
+        executor = StandaloneExecutor()
+    result = executor.run_benchmark(recipe, profile)
 
     # Return as a list because state['history'] is Annotated with operator.add
     return {"history": [{"recipe": recipe, "metrics": result}]}
@@ -73,8 +91,13 @@ def benchmarker_node(state: SintraState) -> dict:
 
 def critic_router(state: SintraState) -> str:
     """
-    The Judge: Evaluates the latest benchmark against hardware targets.
+    The Judge: Evaluates the latest benchmark against hardware targets and
+    Decides if we need another iteration or if we are done..
     """
+
+    if state.get("use_debug") or state.get("is_converged"):
+        return "reporter"
+
     if not state["history"]:
         return "continue"
 
@@ -95,16 +118,16 @@ def critic_router(state: SintraState) -> str:
         log_transition(
             "Critic", "TARGETS ACHIEVED. Optimization converged.", "status.success"
         )
-        return "end"
+        return "reporter"
 
     if state["iteration"] >= 10:
         log_transition(
             "Critic", "MAX ITERATIONS REACHED. Stopping search.", "status.fail"
         )
-        return "end"
+        return "reporter"
 
     log_transition("Critic", "Performance gaps detected. Retrying...", "critic.node")
-    return "continue"
+    return "architect"
 
 
 def reporter_node(state: SintraState) -> dict:
@@ -113,31 +136,23 @@ def reporter_node(state: SintraState) -> dict:
     """
     log_transition("Reporter", "Archiving the final 'Golden Recipe'...", "hw.profile")
 
-    successes = [e for e in state["history"] if e["metrics"].was_successful]
-
-    if not successes:
-        log_transition("Reporter", "No successful recipes to archive.", "status.fail")
+    if not state["history"]:
+        log_transition("Reporter", "Error: No history found to report.", "status.fail")
         return state
 
-    final_entry = successes[-1]
-    recipe = final_entry["recipe"]
-    metrics = final_entry["metrics"]
+    last_entry = state["history"][-1]
 
-    report_data = {
+    output = {
         "hardware_profile": state["profile"].name,
-        "recipe": recipe.model_dump(),
-        "performance": {
-            "tps": metrics.actual_tps,
-            "vram_gb": metrics.actual_vram_usage,
-            "accuracy": metrics.accuracy_score,
-        },
+        "recipe": last_entry["recipe"].model_dump()
+        if hasattr(last_entry["recipe"], "model_dump")
+        else last_entry["recipe"],
+        "performance": last_entry["metrics"].model_dump()
+        if hasattr(last_entry["metrics"], "model_dump")
+        else last_entry["metrics"],
     }
 
-    output_path = Path("optimized_recipe.json")
-    with open(output_path, "w") as f:
-        json.dump(report_data, f, indent=4)
+    with open("optimized_recipe.json", "w") as f:
+        json.dump(output, f, indent=4)
 
-    log_transition(
-        "Reporter", f"SUCCESS: Recipe saved to {output_path}", "status.success"
-    )
     return state
