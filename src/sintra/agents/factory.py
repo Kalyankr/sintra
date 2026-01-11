@@ -29,7 +29,12 @@ def get_architect_llm(config: LLMConfig):
     elif config.provider == LLMProvider.OLLAMA:
         from langchain_ollama import ChatOllama
 
-        llm = ChatOllama(model=config.model_name, temperature=config.temperature)
+        llm = ChatOllama(
+            model=config.model_name,
+            temperature=config.temperature,
+            num_ctx=4096,
+            format="json",
+        )
 
     else:
         raise ValueError(f"Provider {config.provider} not supported.")

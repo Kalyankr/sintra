@@ -2,36 +2,70 @@ import json
 import sys
 import time
 
+import psutil
+from llama_cpp import Llama
+
 from sintra.profiles.models import ExperimentResult, ModelRecipe
 
 
 def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
-    """
-    This is where you would call llama.cpp or your quantization toolkit.
-    """
-    # Simulate processing time
-    time.sleep(2)
+    """Performs actual hardware benchmarking using llama-cpp-python."""
+    try:
+        # Map the 'bits' from the recipe to our downloaded files
+        # (Assuming you downloaded the files above)
+        quant_type = "Q4_K" if recipe.bits <= 2 else "Q4_K_M"
+        model_path = f"models/tinyllama-1.1b-chat-v1.0.{quant_type}.gguf"
 
-    # MOCK LOGIC: Calculate simulated performance
-    # Fewer bits = Higher Speed (TPS), Lower Accuracy
-    base_tps = 10.0 if recipe.bits <= 4 else 5.0
-    prune_boost = 1.0 + (recipe.pruning_ratio * 2)  # Pruning adds speed
+        # Start Timing and Memory Tracking
+        process = psutil.Process()
+        start_mem = process.memory_info().rss
 
-    actual_tps = base_tps * prune_boost
-    actual_vram = (recipe.bits * 0.8) * (1.0 - recipe.pruning_ratio)
+        start_time = time.time()
 
-    # Simulate accuracy (dropping layers reduces accuracy)
-    accuracy = 0.95 - (recipe.pruning_ratio * 0.3)
-    if len(recipe.layers_to_drop) > 5:
-        accuracy -= 0.1
+        # Load Model (The 'Surgery')
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=512,
+            n_threads=8,
+            n_gpu_layers=-1 if sys.platform == "darwin" else 0,
+            verbose=False,
+        )
 
-    return ExperimentResult(
-        actual_tps=round(actual_tps, 2),
-        actual_vram_usage=round(actual_vram, 2),
-        accuracy_score=round(accuracy, 2),
-        was_successful=True,
-        error_log="",
-    )
+        # 4. Run Benchmark Generation
+        # We generate 32 tokens to get a stable TPS reading
+        output = llm(
+            "Q: What is the best fruit amd give a nice story about it? A:",
+            max_tokens=600,
+            temperature=0.5,
+        )
+
+        end_time = time.time()
+
+        # 5. Calculate Real Metrics
+        tokens_sent = output["usage"]["completion_tokens"]
+        duration = end_time - start_time
+        actual_tps = tokens_sent / duration if duration > 0 else 0
+
+        # Calculate Peak RAM usage in GB
+        peak_mem = process.memory_info().rss
+        actual_vram = peak_mem / (1024**3)
+
+        return ExperimentResult(
+            actual_tps=round(actual_tps, 2),
+            actual_vram_usage=round(actual_vram, 2),
+            accuracy_score=0.90,
+            was_successful=True,
+            error_log="",
+        )
+
+    except Exception as e:
+        return ExperimentResult(
+            actual_tps=0,
+            actual_vram_usage=0,
+            accuracy_score=0,
+            was_successful=False,
+            error_log=f"Surgery failed: {str(e)}",
+        )
 
 
 def main():

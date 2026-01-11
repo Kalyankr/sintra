@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # LLM Architect Config
@@ -13,9 +13,9 @@ class LLMProvider(str, Enum):
 
 
 class LLMConfig(BaseModel):
-    provider: LLMProvider = LLMProvider.GOOGLE
-    model_name: str = "gemini-2.5-flash"
-    temperature: float = 0.2
+    provider: LLMProvider = LLMProvider.OLLAMA
+    model_name: str = "qwen3:8b"
+    temperature: float = 0.8
 
 
 # Hardware & Target Definitions
@@ -44,6 +44,14 @@ class ModelRecipe(BaseModel):
         default_factory=list, description="Indices of layers to prune."
     )
     method: str = Field("GGUF")
+
+    @field_validator("pruning_ratio", mode="before")
+    @classmethod
+    def scale_pruning_ratio(cls, v):
+        # If the AI sends 50.0 instead of 0.5, fix it automatically
+        if isinstance(v, (int, float)) and v > 1.0:
+            return v / 100.0
+        return v
 
 
 class ExperimentResult(BaseModel):

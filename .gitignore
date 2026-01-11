@@ -220,3 +220,6 @@ docs/
 
 # vscode settings
 .vscode
+
+# local dev models
+models/

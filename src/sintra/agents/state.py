@@ -23,6 +23,10 @@ class SintraState(TypedDict):
     history: Annotated[
         List[Dict[str, Union[ModelRecipe, ExperimentResult]]], operator.add
     ]
+    # critic feedback
+    critic_feedback: str
+    # best recipe
+    best_recipe: Optional[ModelRecipe]
 
     # Progress Tracking
     iteration: int

@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from sintra.agents.factory import get_architect_llm
 from sintra.benchmarks.executor import MockExecutor, StandaloneExecutor
@@ -40,18 +39,80 @@ def architect_node(state: SintraState) -> dict:
     profile = state["profile"]
     history_summary = format_history_for_llm(state["history"])
 
+    history = state.get("history", [])
+
+    # Create a string of previous attempts to shame the AI into changing
+    past_attempts = ""
+    for i, entry in enumerate(history):
+        recipe = entry.get("recipe")
+        metrics = entry.get("metrics")
+        past_attempts += (
+            f"- Attempt {i}: Recipe {recipe} failed with TPS: {metrics.actual_tps}\n"
+        )
+
     system_prompt = f"""
-    You are the Sintra Architect. Your goal is to compress a large LLM for: {profile.name}.
-    
-    CONSTRAINTS:
-    - VRAM Limit: {profile.constraints.vram_gb} GB
-    - Target TPS: {profile.targets.min_tokens_per_second} 
-    - Target Accuracy: {profile.targets.min_accuracy_score}
-    
-    STRICT RULES:
-    1. Propose a ModelRecipe with 'bits', 'pruning_ratio', and 'layers_to_drop'.
-    2. If TPS is too low: Decrease bits or increase pruning.
-    3. If Accuracy is too low: Increase bits or decrease pruning.
+    You are **Sintra**, an expert LLM Compression Architect.  
+    Your mission is to design an optimal compression recipe for the model belonging to: {profile.name}.  
+    You must balance speed, accuracy, and VRAM efficiency using quantization, pruning, and layer dropping.
+
+    Your output MUST follow all rules below.
+
+    ====================================================
+    STRICT OUTPUT FORMAT (MANDATORY)
+    ====================================================
+    - Output **ONLY valid JSON**. No explanations, no comments.
+    - JSON must contain exactly one object with the keys:
+        - "bits": integer (e.g., 4, 8)
+        - "pruning_ratio": decimal between 0.0 and 1.0 (e.g., 0.25)
+        - "layers_to_drop": list of integers OR an empty list
+    - Never output whole numbers like 20 or 50 for pruning. Only decimals.
+
+    ====================================================
+    CONSTRAINTS
+    ====================================================
+    - VRAM Limit: {profile.constraints.vram_gb} GB  
+    - Target TPS (tokens/sec): {profile.targets.min_tokens_per_second}  
+    - Target Accuracy Score: {profile.targets.min_accuracy_score}
+
+    ====================================================
+    OPTIMIZATION RULES
+    ====================================================
+    1. Always propose a **ModelRecipe** using quantization + pruning + layer dropping.
+    2. If TPS is too low:
+        → decrease bits OR increase pruning_ratio OR increase layers_to_drop.
+    3. If Accuracy is too low:
+        → increase bits OR decrease pruning_ratio OR reduce layers_to_drop.
+    4. Always ensure the recipe fits within the VRAM limit.
+    5. You may use any compression strategy, but the final recipe must obey all constraints.
+
+    ====================================================
+    PAST FAILURES (DO NOT REPEAT)
+    ====================================================
+    {past_attempts}
+
+    - You MUST NOT repeat any failed recipe.
+    - A recipe counts as “repeated” if **bits**, **pruning_ratio**, AND **layers_to_drop** all match a past failure.
+    - If a recipe failed, you MUST change at least one of:
+        → bits  
+        → pruning_ratio  
+        → layers_to_drop
+
+    ====================================================
+    REASONING RULES (INTERNAL ONLY)
+    ====================================================
+    - Think step-by-step internally, but output ONLY the final JSON.
+    - Internally evaluate:
+        • VRAM feasibility  
+        • Expected TPS  
+        • Expected accuracy impact  
+        • Differences from past failures  
+    - Never reveal your reasoning or internal thoughts.
+
+    ====================================================
+    FINAL INSTRUCTION
+    ====================================================
+    Respond with ONLY the JSON object representing the new ModelRecipe.
+
     """
 
     new_recipe = brain.invoke(
@@ -63,8 +124,8 @@ def architect_node(state: SintraState) -> dict:
             },
         ]
     )
-
-    return {"current_recipe": new_recipe, "iteration": state["iteration"] + 1}
+    current_iter = state.get("iteration", 0)
+    return {"current_recipe": new_recipe, "iteration": current_iter + 1}
 
 
 def benchmarker_node(state: SintraState) -> dict:
@@ -89,6 +150,53 @@ def benchmarker_node(state: SintraState) -> dict:
     return {"history": [{"recipe": recipe, "metrics": result}]}
 
 
+def critic_node(state: SintraState) -> dict:
+    history = state.get("history", [])
+    if not history:
+        return {"critic_feedback": "Initial attempt."}
+
+    # last_run is a dict from your history list
+    last_run = history[-1]
+    metrics = last_run["metrics"]
+    recipe = last_run["recipe"]
+    targets = state["profile"].targets
+
+    # Track the "Best So Far"
+    current_best = state.get("best_recipe")
+    is_better = False
+
+    if metrics.was_successful:
+        if not current_best:
+            if metrics.accuracy_score >= targets.min_accuracy_score:
+                is_better = True
+        else:
+            best_metrics = current_best["metrics"]
+            if metrics.actual_tps > best_metrics.actual_tps:
+                if metrics.accuracy_score >= targets.min_accuracy_score:
+                    is_better = True
+
+    # Advice Logic
+    feedback = []
+    if metrics.actual_tps < targets.min_tokens_per_second:
+        feedback.append(f"SPEED FAIL: {metrics.actual_tps} TPS is below target.")
+        feedback.append("ADVICE: Try 3-bit or 2-bit. Set pruning_ratio to 0.0.")
+
+    # Anti-Loop Logic
+    if len(history) > 1:
+        prev_run = history[-2]
+        if recipe == prev_run["recipe"]:
+            feedback.append(
+                "WARNING: You repeated the exact same recipe. Try something new!"
+            )
+
+    updates = {"critic_feedback": "\n".join(feedback)}
+    if is_better:
+        # Save the current successful run as the best_recipe
+        updates["best_recipe"] = last_run
+
+    return updates
+
+
 def critic_router(state: SintraState) -> str:
     """
     The Judge: Evaluates the latest benchmark against hardware targets and
@@ -96,6 +204,14 @@ def critic_router(state: SintraState) -> str:
     """
 
     if state.get("use_debug") or state.get("is_converged"):
+        return "reporter"
+
+    if state.get("iteration", 0) >= 6:
+        log_transition(
+            "Critic",
+            "GIVING UP: Max iterations reached. Using best attempt.",
+            "status.warn",
+        )
         return "reporter"
 
     if not state["history"]:

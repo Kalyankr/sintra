@@ -5,6 +5,7 @@ from langgraph.graph import END, StateGraph
 from sintra.agents.nodes import (
     architect_node,
     benchmarker_node,
+    critic_node,
     critic_router,
     reporter_node,
 )
@@ -21,15 +22,17 @@ def build_sintra_workflow():
     # Define the "Actors"
     workflow.add_node("architect", architect_node)
     workflow.add_node("benchmarker", benchmarker_node)
+    workflow.add_node("critic", critic_node)
     workflow.add_node("reporter", reporter_node)
 
     # Define the "Path"
     workflow.set_entry_point("architect")
     workflow.add_edge("architect", "benchmarker")
+    workflow.add_edge("benchmarker", "critic")
 
     # The Decision Point: Critic determines if we repeat or stop
     workflow.add_conditional_edges(
-        "benchmarker",
+        "critic",
         critic_router,
         {
             "architect": "architect",
@@ -78,7 +81,7 @@ def main():
     app = build_sintra_workflow()
 
     # Streaming the graph for real-time console updates
-    for _ in app.stream(initial_state):
+    for _ in app.stream(initial_state, config={"recursion_limit": 50}):
         pass
 
     console.rule("[status.success] OPTIMIZATION COMPLETE")
