@@ -21,17 +21,21 @@ class LLMConfig(BaseModel):
 # Hardware & Target Definitions
 class Constraints(BaseModel):
     vram_gb: float
+    cpu_arch: Optional[str] = None
+    has_cuda: bool = False
 
 
 class Targets(BaseModel):
     min_tokens_per_second: float
     min_accuracy_score: float
+    max_latency_ms: Optional[float] = None
 
 
 class HardwareProfile(BaseModel):
     name: str
     constraints: Constraints
     targets: Targets
+    supported_quantizations: Optional[List[str]] = None
 
 
 # Surgery & Results
