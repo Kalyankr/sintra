@@ -1,7 +1,12 @@
 import sys
 
+from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
 
+# Load environment variables from .env file (if exists)
+load_dotenv()
+
+from sintra.agents.factory import MissingAPIKeyError
 from sintra.agents.nodes import (
     LLMConnectionError,
     architect_node,
@@ -88,6 +93,14 @@ def main():
         for _ in app.stream(initial_state, config={"recursion_limit": 50}):
             pass
         console.rule("[status.success] OPTIMIZATION COMPLETE")
+    except MissingAPIKeyError as e:
+        console.print(f"\n[bold red]✗ Missing API Key[/bold red]")
+        console.print(f"  {e}")
+        console.print("\n[dim]Setup:[/dim]")
+        console.print("  1. Copy .env.example to .env: [cyan]cp .env.example .env[/cyan]")
+        console.print("  2. Edit .env and add your API key")
+        console.print("  3. Or export it: [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
+        sys.exit(1)
     except LLMConnectionError as e:
         console.print(f"\n[bold red]✗ LLM Connection Failed[/bold red]")
         console.print(f"  {e}")

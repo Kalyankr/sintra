@@ -1,3 +1,4 @@
+import os
 from typing import Union
 
 from langchain_anthropic import ChatAnthropic
@@ -11,6 +12,18 @@ StructuredLLM = Union[
     ChatOpenAI, ChatAnthropic, ChatGoogleGenerativeAI, "ChatOllama"
 ]
 
+# Map providers to their required environment variables
+PROVIDER_API_KEYS = {
+    LLMProvider.OPENAI: "OPENAI_API_KEY",
+    LLMProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
+    LLMProvider.GOOGLE: "GOOGLE_API_KEY",
+}
+
+
+class MissingAPIKeyError(Exception):
+    """Raised when a required API key is not set."""
+    pass
+
 
 def get_architect_llm(config: LLMConfig) -> StructuredLLM:
     """Returns an LLM instance with structured output capabilities.
@@ -22,8 +35,18 @@ def get_architect_llm(config: LLMConfig) -> StructuredLLM:
         An LLM instance bound to ModelRecipe schema for structured output.
     
     Raises:
+        MissingAPIKeyError: If the required API key is not set.
         ValueError: If the provider is not supported.
     """
+    # Check for required API key (Ollama doesn't need one)
+    if config.provider in PROVIDER_API_KEYS:
+        env_var = PROVIDER_API_KEYS[config.provider]
+        if not os.environ.get(env_var):
+            raise MissingAPIKeyError(
+                f"{env_var} is not set. "
+                f"Add it to your .env file or export it in your shell."
+            )
+
     llm: StructuredLLM
 
     if config.provider == LLMProvider.OPENAI:
