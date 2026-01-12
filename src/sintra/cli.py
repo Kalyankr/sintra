@@ -2,6 +2,9 @@ import argparse
 
 from sintra.profiles.models import LLMConfig, LLMProvider
 
+# Default model to optimize
+DEFAULT_TARGET_MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
 
 def parse_args() -> argparse.Namespace:
     """Defines and parses the Sintra Command Line Interface."""
@@ -16,6 +19,26 @@ def parse_args() -> argparse.Namespace:
     # Required: What are we optimizing for?
     parser.add_argument(
         "profile", type=str, help="Path to hardware YAML (e.g., profiles/pi5.yaml)"
+    )
+
+    # Target Model Configuration
+    group_target = parser.add_argument_group("Target Model")
+    group_target.add_argument(
+        "--model-id",
+        type=str,
+        default=DEFAULT_TARGET_MODEL,
+        help="HuggingFace model ID to optimize (e.g., meta-llama/Llama-3-8B)",
+    )
+    group_target.add_argument(
+        "--hf-token",
+        type=str,
+        default=None,
+        help="HuggingFace token for gated models (or set HF_TOKEN env var)",
+    )
+    group_target.add_argument(
+        "--real-compression",
+        action="store_true",
+        help="Enable real compression (download, quantize). Requires llama.cpp",
     )
 
     # Brain Configuration

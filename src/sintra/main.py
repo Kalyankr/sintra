@@ -1,3 +1,4 @@
+import os
 import sys
 
 from dotenv import load_dotenv
@@ -65,6 +66,16 @@ def main():
         console.print(f"[status.fail] Failed to load hardware profile: {e}")
         sys.exit(1)
 
+    # Set up environment for worker subprocess
+    if args.real_compression:
+        os.environ["SINTRA_REAL_COMPRESSION"] = "true"
+        os.environ["SINTRA_MODEL_ID"] = args.model_id
+        if args.hf_token:
+            os.environ["HF_TOKEN"] = args.hf_token
+        log_transition(
+            "System", f"Real compression enabled for {args.model_id}", "hw.profile"
+        )
+
     # Initialize State
     initial_state: SintraState = {
         "profile": profile,
@@ -73,6 +84,8 @@ def main():
             model_name=args.model,
         ),
         "use_debug": args.debug,
+        "use_mock": args.mock,
+        "target_model_id": args.model_id,
         "iteration": 0,
         "history": [],
         "is_converged": False,
@@ -84,6 +97,10 @@ def main():
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
     )
+    if not args.debug:
+        log_transition(
+            "System", f"Optimizing: {args.model_id}", "hw.profile"
+        )
 
     # Run Workflow
     app = build_sintra_workflow()

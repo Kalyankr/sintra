@@ -16,6 +16,9 @@ class SintraState(TypedDict):
     profile: HardwareProfile
     llm_config: LLMConfig
 
+    # Target model configuration
+    target_model_id: str
+
     # Current Work-in-Progress
     current_recipe: Optional[ModelRecipe]
 
@@ -32,5 +35,6 @@ class SintraState(TypedDict):
     iteration: int
     is_converged: bool
 
-    # debug mode
+    # Execution modes
     use_debug: bool
+    use_mock: bool

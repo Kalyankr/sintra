@@ -183,8 +183,8 @@ def benchmarker_node(state: SintraState) -> StateUpdate:
         f"Executing Surgery: {recipe.bits}-bit | Prune: {recipe.pruning_ratio}",
         "lab.node",
     )
-    # Use Mock if in debug mode
-    if state.get("use_debug"):
+    # Use Mock if in debug mode or explicitly requested
+    if state.get("use_debug") or state.get("use_mock"):
         executor = MockExecutor()
     else:
         executor = StandaloneExecutor()

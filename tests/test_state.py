@@ -21,6 +21,7 @@ class TestSintraState:
         required_keys = [
             "profile",
             "llm_config",
+            "target_model_id",
             "current_recipe",
             "history",
             "critic_feedback",
@@ -28,6 +29,7 @@ class TestSintraState:
             "iteration",
             "is_converged",
             "use_debug",
+            "use_mock",
         ]
 
         for key in required_keys:
