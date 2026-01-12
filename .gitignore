@@ -224,3 +224,5 @@ docs/
 # local dev models
 models/
 REPORT.md
+# Output files
+outputs/

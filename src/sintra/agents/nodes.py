@@ -2,6 +2,7 @@
 """Agent workflow nodes for the Sintra optimization loop."""
 
 import json
+from pathlib import Path
 from typing import Any, Dict, Literal
 
 from sintra.agents.factory import get_architect_llm
@@ -14,7 +15,8 @@ from .utils import format_history_for_llm
 
 # Configuration constants
 MAX_ITERATIONS = 10
-DEFAULT_OUTPUT_FILE = "optimized_recipe.json"
+DEFAULT_OUTPUT_DIR = Path("outputs")
+DEFAULT_OUTPUT_FILE = DEFAULT_OUTPUT_DIR / "optimized_recipe.json"
 
 # Type alias for state updates
 StateUpdate = Dict[str, Any]
@@ -305,6 +307,7 @@ def reporter_node(state: SintraState) -> dict:
     }
 
     try:
+        DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         with open(DEFAULT_OUTPUT_FILE, "w") as f:
             json.dump(output, f, indent=4)
         log_transition("Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success")

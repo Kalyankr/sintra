@@ -278,4 +278,4 @@ class TestConstants:
 
     def test_default_output_file_is_json(self) -> None:
         """Test DEFAULT_OUTPUT_FILE has .json extension."""
-        assert DEFAULT_OUTPUT_FILE.endswith(".json")
+        assert str(DEFAULT_OUTPUT_FILE).endswith(".json")
