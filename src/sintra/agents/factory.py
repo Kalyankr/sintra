@@ -1,14 +1,30 @@
+from typing import Union
+
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from sintra.profiles.models import LLMConfig, LLMProvider, ModelRecipe
 
-# sintra/agents/factory.py
+# Type alias for LLM with structured output
+StructuredLLM = Union[
+    ChatOpenAI, ChatAnthropic, ChatGoogleGenerativeAI, "ChatOllama"
+]
 
 
-def get_architect_llm(config: LLMConfig):
-    """Returns an LLM instance with structured output capabilities."""
+def get_architect_llm(config: LLMConfig) -> StructuredLLM:
+    """Returns an LLM instance with structured output capabilities.
+    
+    Args:
+        config: LLM configuration with provider, model name, and temperature.
+    
+    Returns:
+        An LLM instance bound to ModelRecipe schema for structured output.
+    
+    Raises:
+        ValueError: If the provider is not supported.
+    """
+    llm: StructuredLLM
 
     if config.provider == LLMProvider.OPENAI:
         llm = ChatOpenAI(model=config.model_name, temperature=config.temperature)
@@ -17,12 +33,10 @@ def get_architect_llm(config: LLMConfig):
         llm = ChatAnthropic(model=config.model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.GOOGLE:
-        # Ensure the model name doesn't double-prefix
+        # Normalize model name - some LangChain versions require 'models/' prefix
         model_name = config.model_name
         if not model_name.startswith("models/"):
-            # Some LangChain versions prefer the prefix, some don't.
-            # 'gemini-1.5-flash-latest' is usually the most stable.
-            pass
+            model_name = f"models/{model_name}"
 
         llm = ChatGoogleGenerativeAI(model=model_name, temperature=config.temperature)
 
