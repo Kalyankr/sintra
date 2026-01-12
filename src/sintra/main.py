@@ -113,6 +113,20 @@ def main():
     except KeyboardInterrupt:
         console.print("\n[yellow]Optimization cancelled by user[/yellow]")
         sys.exit(130)
+    except Exception as e:
+        # Catch-all for unexpected errors
+        console.print(f"\n[bold red]✗ Unexpected Error[/bold red]")
+        console.print(f"  {type(e).__name__}: {e}")
+        console.print("\n[dim]This might be a bug. Please report it with:[/dim]")
+        console.print("  • The command you ran")
+        console.print("  • Your hardware profile")
+        console.print("  • The full error message above")
+        if args.debug:
+            # In debug mode, show full traceback
+            import traceback
+            console.print("\n[dim]Full traceback:[/dim]")
+            console.print(traceback.format_exc())
+        sys.exit(1)
 
 
 if __name__ == "__main__":

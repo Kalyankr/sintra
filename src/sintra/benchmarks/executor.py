@@ -45,10 +45,22 @@ class StandaloneExecutor(BenchmarkExecutor):
         env = os.environ.copy()
         env["VRAM_LIMIT_GB"] = str(profile.constraints.vram_gb)
 
+        # Find the worker script
+        import sintra
+        import pathlib
+        package_dir = pathlib.Path(sintra.__file__).parent
+        worker_script = package_dir / "benchmarks" / "worker" / "runner.py"
+        
+        if not worker_script.exists():
+            return self._error_result(
+                f"Worker script not found at {worker_script}. "
+                "Please reinstall sintra."
+            )
+
         with console.status(f"[bold green]Running {recipe.method} Surgery...") as _:
             try:
                 process = subprocess.Popen(
-                    ["uv", "run", "src/sintra/benchmarks/worker/runner.py"],
+                    ["uv", "run", str(worker_script)],
                     env=env,
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
@@ -59,6 +71,11 @@ class StandaloneExecutor(BenchmarkExecutor):
                 # Communicate: Send recipe, get results
                 stdout, stderr = process.communicate(input=recipe_json, timeout=600)
 
+            except FileNotFoundError:
+                return self._error_result(
+                    "'uv' command not found. Please install uv: "
+                    "curl -LsSf https://astral.sh/uv/install.sh | sh"
+                )
             except subprocess.TimeoutExpired:
                 process.kill()
                 return self._error_result("Process timed out (600s limit)")

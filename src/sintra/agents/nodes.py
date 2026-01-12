@@ -147,8 +147,26 @@ def architect_node(state: SintraState) -> StateUpdate:
                 f"Cannot connect to {provider} LLM service. "
                 f"Original error: {e}"
             ) from e
+        # Check for API key errors
+        if any(term in error_str for term in ["api_key", "api key", "authentication", "unauthorized", "401"]):
+            provider = state["llm_config"].provider.value
+            raise LLMConnectionError(
+                f"Authentication failed for {provider}. Check your API key. "
+                f"Original error: {e}"
+            ) from e
+        # Check for rate limiting
+        if any(term in error_str for term in ["rate limit", "rate_limit", "429", "too many requests"]):
+            raise LLMConnectionError(
+                f"Rate limited by LLM provider. Please wait and try again. "
+                f"Original error: {e}"
+            ) from e
         # Re-raise other exceptions as-is
         raise
+
+    # Validate we got a proper recipe back
+    if new_recipe is None:
+        log_transition("Architect", "LLM returned empty response, using fallback recipe", "status.warn")
+        new_recipe = ModelRecipe(bits=4, pruning_ratio=0.1, layers_to_drop=[], method="GGUF")
 
     current_iter = state.get("iteration", 0)
     return {"current_recipe": new_recipe, "iteration": current_iter + 1}
@@ -286,7 +304,18 @@ def reporter_node(state: SintraState) -> dict:
         else last_entry["metrics"],
     }
 
-    with open("optimized_recipe.json", "w") as f:
-        json.dump(output, f, indent=4)
+    try:
+        with open(DEFAULT_OUTPUT_FILE, "w") as f:
+            json.dump(output, f, indent=4)
+        log_transition("Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success")
+    except (IOError, OSError) as e:
+        log_transition(
+            "Reporter", 
+            f"Warning: Could not save to file: {e}. Printing to console instead.", 
+            "status.warn"
+        )
+        # Fallback: print to console
+        from sintra.ui.console import console
+        console.print_json(data=output)
 
     return state
