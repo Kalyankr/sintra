@@ -1,11 +1,11 @@
-name: "Mac mini M4 (16GB)"
+name: "Raspberry Pi 5 (8GB)"
 constraints:
-  vram_gb: 14 # overhead for OS
+  vram_gb: 6  # Shared system memory for AI workloads
   cpu_arch: "arm64"
   has_cuda: false
 targets:
-  min_tokens_per_second: 80
-  max_latency_ms: 300.0
-  min_accuracy_score: 0.65
+  min_tokens_per_second: 15
+  max_latency_ms: 1000.0
+  min_accuracy_score: 0.60
 supported_quantizations:
   - "GGUF"
