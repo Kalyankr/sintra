@@ -1,0 +1,1 @@
+"""Sintra test suite."""

@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+"""Agent workflow nodes for the Sintra optimization loop."""
+
 import json
+from pathlib import Path
+from typing import Any, Dict, Literal
 
 from sintra.agents.factory import get_architect_llm
 from sintra.benchmarks.executor import MockExecutor, StandaloneExecutor
@@ -8,12 +13,22 @@ from sintra.ui.console import log_transition
 from .state import SintraState
 from .utils import format_history_for_llm
 
+# Configuration constants
+MAX_ITERATIONS = 10
+DEFAULT_OUTPUT_DIR = Path("outputs")
+DEFAULT_OUTPUT_FILE = DEFAULT_OUTPUT_DIR / "optimized_recipe.json"
 
-def architect_node(state: SintraState) -> dict:
-    """
-    The Brain: Analyzes past performance and proposes the next
-    compression strategy (The Recipe).
-    """
+# Type alias for state updates
+StateUpdate = Dict[str, Any]
+
+
+class LLMConnectionError(Exception):
+    """Raised when the LLM service is unavailable or connection fails."""
+    pass
+
+
+def architect_node(state: SintraState) -> StateUpdate:
+    """The Brain: Analyzes past performance and proposes the next compression strategy."""
 
     # DEBUG MODE: Skip the LLM and return a fixed recipe
     if state.get("use_debug"):
@@ -79,9 +94,9 @@ def architect_node(state: SintraState) -> dict:
     ====================================================
     1. Always propose a **ModelRecipe** using quantization + pruning + layer dropping.
     2. If TPS is too low:
-        → decrease bits OR increase pruning_ratio OR increase layers_to_drop.
+        -> decrease bits OR increase pruning_ratio OR increase layers_to_drop.
     3. If Accuracy is too low:
-        → increase bits OR decrease pruning_ratio OR reduce layers_to_drop.
+        -> increase bits OR decrease pruning_ratio OR reduce layers_to_drop.
     4. Always ensure the recipe fits within the VRAM limit.
     5. You may use any compression strategy, but the final recipe must obey all constraints.
 
@@ -91,21 +106,21 @@ def architect_node(state: SintraState) -> dict:
     {past_attempts}
 
     - You MUST NOT repeat any failed recipe.
-    - A recipe counts as “repeated” if **bits**, **pruning_ratio**, AND **layers_to_drop** all match a past failure.
+    - A recipe counts as "repeated" if **bits**, **pruning_ratio**, AND **layers_to_drop** all match a past failure.
     - If a recipe failed, you MUST change at least one of:
-        → bits  
-        → pruning_ratio  
-        → layers_to_drop
+        -> bits  
+        -> pruning_ratio  
+        -> layers_to_drop
 
     ====================================================
     REASONING RULES (INTERNAL ONLY)
     ====================================================
     - Think step-by-step internally, but output ONLY the final JSON.
     - Internally evaluate:
-        • VRAM feasibility  
-        • Expected TPS  
-        • Expected accuracy impact  
-        • Differences from past failures  
+        - VRAM feasibility  
+        - Expected TPS  
+        - Expected accuracy impact  
+        - Differences from past failures  
     - Never reveal your reasoning or internal thoughts.
 
     ====================================================
@@ -115,23 +130,52 @@ def architect_node(state: SintraState) -> dict:
 
     """
 
-    new_recipe = brain.invoke(
-        [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"History:\n{history_summary}\nPropose next recipe.",
-            },
-        ]
-    )
+    try:
+        new_recipe = brain.invoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"History:\n{history_summary}\nPropose next recipe.",
+                },
+            ]
+        )
+    except Exception as e:
+        # Check for connection-related errors
+        error_str = str(e).lower()
+        if any(term in error_str for term in ["connection", "refused", "timeout", "unreachable", "connect"]):
+            provider = state["llm_config"].provider.value
+            raise LLMConnectionError(
+                f"Cannot connect to {provider} LLM service. "
+                f"Original error: {e}"
+            ) from e
+        # Check for API key errors
+        if any(term in error_str for term in ["api_key", "api key", "authentication", "unauthorized", "401"]):
+            provider = state["llm_config"].provider.value
+            raise LLMConnectionError(
+                f"Authentication failed for {provider}. Check your API key. "
+                f"Original error: {e}"
+            ) from e
+        # Check for rate limiting
+        if any(term in error_str for term in ["rate limit", "rate_limit", "429", "too many requests"]):
+            raise LLMConnectionError(
+                f"Rate limited by LLM provider. Please wait and try again. "
+                f"Original error: {e}"
+            ) from e
+        # Re-raise other exceptions as-is
+        raise
+
+    # Validate we got a proper recipe back
+    if new_recipe is None:
+        log_transition("Architect", "LLM returned empty response, using fallback recipe", "status.warn")
+        new_recipe = ModelRecipe(bits=4, pruning_ratio=0.1, layers_to_drop=[], method="GGUF")
+
     current_iter = state.get("iteration", 0)
     return {"current_recipe": new_recipe, "iteration": current_iter + 1}
 
 
-def benchmarker_node(state: SintraState) -> dict:
-    """
-    The Lab: Executes the recipe and returns physical metrics.
-    """
+def benchmarker_node(state: SintraState) -> StateUpdate:
+    """The Lab: Executes the recipe and returns physical metrics."""
     recipe = state["current_recipe"]
     profile = state["profile"]
     log_transition(
@@ -206,16 +250,16 @@ def critic_router(state: SintraState) -> str:
     if state.get("use_debug") or state.get("is_converged"):
         return "reporter"
 
-    if state.get("iteration", 0) >= 6:
+    if state.get("iteration", 0) >= MAX_ITERATIONS:
         log_transition(
             "Critic",
-            "GIVING UP: Max iterations reached. Using best attempt.",
+            f"GIVING UP: Max iterations ({MAX_ITERATIONS}) reached. Using best attempt.",
             "status.warn",
         )
         return "reporter"
 
     if not state["history"]:
-        return "continue"
+        return "architect"
 
     last_experiment = state["history"][-1]
     metrics = last_experiment["metrics"]
@@ -223,7 +267,7 @@ def critic_router(state: SintraState) -> str:
 
     if not metrics.was_successful:
         log_transition("Critic", f"Crash detected: {metrics.error_log}", "status.fail")
-        return "continue"
+        return "architect"
 
     # Objective Analysis
     met_tps = metrics.actual_tps >= profile.targets.min_tokens_per_second
@@ -233,12 +277,6 @@ def critic_router(state: SintraState) -> str:
     if met_tps and met_accuracy and under_vram:
         log_transition(
             "Critic", "TARGETS ACHIEVED. Optimization converged.", "status.success"
-        )
-        return "reporter"
-
-    if state["iteration"] >= 10:
-        log_transition(
-            "Critic", "MAX ITERATIONS REACHED. Stopping search.", "status.fail"
         )
         return "reporter"
 
@@ -268,7 +306,19 @@ def reporter_node(state: SintraState) -> dict:
         else last_entry["metrics"],
     }
 
-    with open("optimized_recipe.json", "w") as f:
-        json.dump(output, f, indent=4)
+    try:
+        DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        with open(DEFAULT_OUTPUT_FILE, "w") as f:
+            json.dump(output, f, indent=4)
+        log_transition("Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success")
+    except (IOError, OSError) as e:
+        log_transition(
+            "Reporter", 
+            f"Warning: Could not save to file: {e}. Printing to console instead.", 
+            "status.warn"
+        )
+        # Fallback: print to console
+        from sintra.ui.console import console
+        console.print_json(data=output)
 
     return state

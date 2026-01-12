@@ -25,8 +25,8 @@ class SintraState(TypedDict):
     ]
     # critic feedback
     critic_feedback: str
-    # best recipe
-    best_recipe: Optional[ModelRecipe]
+    # best recipe (dict with 'recipe' and 'metrics' keys)
+    best_recipe: Optional[Dict[str, Union[ModelRecipe, ExperimentResult]]]
 
     # Progress Tracking
     iteration: int

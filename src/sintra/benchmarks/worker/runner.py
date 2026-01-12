@@ -1,6 +1,8 @@
 import json
+import os
 import sys
 import time
+from pathlib import Path
 
 import psutil
 from llama_cpp import Llama
@@ -8,13 +10,65 @@ from llama_cpp import Llama
 from sintra.profiles.models import ExperimentResult, ModelRecipe
 
 
+def find_model_file(recipe: ModelRecipe) -> str:
+    """Find the appropriate model file based on quantization bits.
+    
+    Args:
+        recipe: The compression recipe specifying bits.
+        
+    Returns:
+        Path to the model file.
+        
+    Raises:
+        FileNotFoundError: If no suitable model file is found.
+    """
+    # Map bits to quantization types
+    quant_map = {
+        2: ["Q2_K"],
+        3: ["Q3_K_S", "Q3_K_M", "Q3_K_L"],
+        4: ["Q4_K_S", "Q4_K_M", "Q4_K", "Q4_0"],
+        5: ["Q5_K_S", "Q5_K_M", "Q5_K"],
+        6: ["Q6_K"],
+        8: ["Q8_0"],
+    }
+    
+    quant_types = quant_map.get(recipe.bits, ["Q4_K_M", "Q4_K"])
+    
+    # Search locations
+    search_dirs = [
+        Path("models"),
+        Path.home() / ".cache" / "sintra" / "models",
+        Path.home() / ".local" / "share" / "sintra" / "models",
+    ]
+    
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for quant_type in quant_types:
+            # Try various naming patterns
+            patterns = [
+                f"*{quant_type}*.gguf",
+                f"*.{quant_type}.gguf",
+            ]
+            for pattern in patterns:
+                matches = list(search_dir.glob(pattern))
+                if matches:
+                    return str(matches[0])
+    
+    # Provide helpful error message
+    raise FileNotFoundError(
+        f"No GGUF model found for {recipe.bits}-bit quantization. "
+        f"Searched in: {', '.join(str(d) for d in search_dirs)}. "
+        f"Please download a model: huggingface-cli download TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF "
+        f"--local-dir models --include '*Q4_K_M*'"
+    )
+
+
 def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     """Performs actual hardware benchmarking using llama-cpp-python."""
     try:
-        # Map the 'bits' from the recipe to our downloaded files
-        # (Assuming you downloaded the files above)
-        quant_type = "Q4_K" if recipe.bits <= 2 else "Q4_K_M"
-        model_path = f"models/tinyllama-1.1b-chat-v1.0.{quant_type}.gguf"
+        # Find appropriate model file
+        model_path = find_model_file(recipe)
 
         # Start Timing and Memory Tracking
         process = psutil.Process()

@@ -1,13 +1,27 @@
-"""
-Utility functions for the Sintra Agent.
+"""Utility functions for the Sintra Agent.
+
 Handles string formatting, telemetry parsing, and log cleaning.
 """
 
+from typing import Any, Dict, List, Union
 
-def format_history_for_llm(history: list) -> str:
-    """
-    Narrates the experiment history so the LLM can reason about
-    the relationship between recipes and hardware performance.
+from sintra.profiles.models import ExperimentResult, ModelRecipe
+
+# Type alias for history entries
+HistoryEntry = Dict[str, Union[ModelRecipe, ExperimentResult]]
+
+
+def format_history_for_llm(history: List[HistoryEntry]) -> str:
+    """Narrates the experiment history for LLM reasoning.
+    
+    Formats the relationship between recipes and hardware performance
+    in a human-readable narrative that the LLM can reason about.
+
+    Args:
+        history: List of experiment entries, each containing 'recipe' and 'metrics'.
+
+    Returns:
+        Formatted string summarizing all experiments.
     """
     if not history:
         return "No previous experiments recorded. This is the baseline run."
