@@ -20,6 +20,11 @@ DEFAULT_OUTPUT_FILE = "optimized_recipe.json"
 StateUpdate = Dict[str, Any]
 
 
+class LLMConnectionError(Exception):
+    """Raised when the LLM service is unavailable or connection fails."""
+    pass
+
+
 def architect_node(state: SintraState) -> StateUpdate:
     """The Brain: Analyzes past performance and proposes the next compression strategy."""
 
@@ -123,15 +128,28 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     """
 
-    new_recipe = brain.invoke(
-        [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"History:\n{history_summary}\nPropose next recipe.",
-            },
-        ]
-    )
+    try:
+        new_recipe = brain.invoke(
+            [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": f"History:\n{history_summary}\nPropose next recipe.",
+                },
+            ]
+        )
+    except Exception as e:
+        # Check for connection-related errors
+        error_str = str(e).lower()
+        if any(term in error_str for term in ["connection", "refused", "timeout", "unreachable", "connect"]):
+            provider = state["llm_config"].provider.value
+            raise LLMConnectionError(
+                f"Cannot connect to {provider} LLM service. "
+                f"Original error: {e}"
+            ) from e
+        # Re-raise other exceptions as-is
+        raise
+
     current_iter = state.get("iteration", 0)
     return {"current_recipe": new_recipe, "iteration": current_iter + 1}
 

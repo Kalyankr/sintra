@@ -3,6 +3,7 @@ import sys
 from langgraph.graph import END, StateGraph
 
 from sintra.agents.nodes import (
+    LLMConnectionError,
     architect_node,
     benchmarker_node,
     critic_node,
@@ -83,10 +84,22 @@ def main():
     app = build_sintra_workflow()
 
     # Streaming the graph for real-time console updates
-    for _ in app.stream(initial_state, config={"recursion_limit": 50}):
-        pass
-
-    console.rule("[status.success] OPTIMIZATION COMPLETE")
+    try:
+        for _ in app.stream(initial_state, config={"recursion_limit": 50}):
+            pass
+        console.rule("[status.success] OPTIMIZATION COMPLETE")
+    except LLMConnectionError as e:
+        console.print(f"\n[bold red]✗ LLM Connection Failed[/bold red]")
+        console.print(f"  {e}")
+        console.print("\n[dim]Suggestions:[/dim]")
+        if args.provider == "ollama":
+            console.print("  • Start Ollama: [cyan]ollama serve[/cyan]")
+            console.print("  • Or use debug mode: [cyan]sintra --debug <profile>[/cyan]")
+        console.print("  • Or try a different provider: [cyan]--provider openai --model gpt-4o[/cyan]")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Optimization cancelled by user[/yellow]")
+        sys.exit(130)
 
 
 if __name__ == "__main__":

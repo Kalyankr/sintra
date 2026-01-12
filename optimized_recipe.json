@@ -1,0 +1,16 @@
+{
+    "hardware_profile": "Raspberry Pi 5 (8GB)",
+    "recipe": {
+        "bits": 2,
+        "pruning_ratio": 0.1,
+        "layers_to_drop": [],
+        "method": "GGUF"
+    },
+    "performance": {
+        "actual_tps": 2.87,
+        "actual_vram_usage": 2.1,
+        "accuracy_score": 0.82,
+        "was_successful": true,
+        "error_log": null
+    }
+}
