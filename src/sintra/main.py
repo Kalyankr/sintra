@@ -12,7 +12,7 @@ from sintra.agents.nodes import (
 from sintra.agents.state import SintraState
 from sintra.cli import parse_args
 from sintra.profiles.models import LLMConfig, LLMProvider
-from sintra.profiles.parser import load_hardware_profile
+from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
 from sintra.ui.console import console, log_transition
 
 
@@ -55,7 +55,7 @@ def main():
     # Load Hardware Context
     try:
         profile = load_hardware_profile(args.profile)
-    except Exception as e:
+    except ProfileLoadError as e:
         console.print(f"[status.fail] Failed to load hardware profile: {e}")
         sys.exit(1)
 
@@ -71,6 +71,8 @@ def main():
         "history": [],
         "is_converged": False,
         "current_recipe": None,
+        "critic_feedback": "",
+        "best_recipe": None,
     }
 
     log_transition(
