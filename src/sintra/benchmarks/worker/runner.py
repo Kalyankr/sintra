@@ -4,7 +4,7 @@ This module runs in a separate process to benchmark compressed models.
 It receives a ModelRecipe via stdin and outputs ExperimentResult as JSON.
 
 The worker can operate in two modes:
-1. REAL mode: Downloads, quantizes, and benchmarks actual models
+1. REAL mode: Downloads, quantizes (with optional pruning), and benchmarks actual models
 2. LEGACY mode: Uses pre-downloaded GGUF files (backward compatible)
 """
 
@@ -74,12 +74,19 @@ def find_cached_model(recipe: ModelRecipe) -> Optional[str]:
     return None
 
 
-def download_and_quantize(model_id: str, bits: int) -> str:
-    """Download a model and quantize it to the specified bit depth.
+def download_and_quantize(
+    model_id: str,
+    bits: int,
+    pruning_ratio: float = 0.0,
+    layers_to_drop: Optional[list[int]] = None,
+) -> str:
+    """Download a model and quantize it with optional compression.
     
     Args:
         model_id: HuggingFace model ID
         bits: Target quantization bits
+        pruning_ratio: Fraction of weights to prune (0.0-1.0)
+        layers_to_drop: Layer indices to remove
         
     Returns:
         Path to the quantized GGUF file
@@ -97,14 +104,31 @@ def download_and_quantize(model_id: str, bits: int) -> str:
     except DownloadError as e:
         raise RuntimeError(f"Download failed: {e}")
     
-    sys.stderr.write(f"Worker: Quantizing to {bits}-bit...\n")
+    # Log compression settings
+    compression_info = f"{bits}-bit"
+    if pruning_ratio > 0:
+        compression_info += f", {pruning_ratio:.0%} pruning"
+    if layers_to_drop:
+        compression_info += f", dropping {len(layers_to_drop)} layers"
+    sys.stderr.write(f"Worker: Compressing to {compression_info}...\n")
     
-    # Quantize
+    # Quantize with optional pruning/layer dropping
     quantizer = GGUFQuantizer()
     try:
-        # Extract model name from ID
         model_name = model_id.split("/")[-1].lower()
-        quantized_path = quantizer.quantize(model_path, bits, model_name)
+        
+        # Use the new compression-aware quantization
+        if pruning_ratio > 0 or layers_to_drop:
+            quantized_path = quantizer.quantize_with_compression(
+                model_path,
+                bits,
+                pruning_ratio=pruning_ratio,
+                layers_to_drop=layers_to_drop,
+                model_name=model_name,
+            )
+        else:
+            quantized_path = quantizer.quantize(model_path, bits, model_name)
+        
         return str(quantized_path)
     except QuantizationError as e:
         raise RuntimeError(f"Quantization failed: {e}")
@@ -199,12 +223,12 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     """Perform the full compression and benchmarking pipeline.
     
     This function orchestrates:
-    1. Finding or creating the quantized model
+    1. Finding or creating the quantized model (with optional pruning)
     2. Running the benchmark
     3. Measuring accuracy
     
     Args:
-        recipe: The compression recipe to apply
+        recipe: The compression recipe to apply (includes bits, pruning_ratio, layers_to_drop)
         
     Returns:
         ExperimentResult with all measured metrics
@@ -217,10 +241,25 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
         model_path: Optional[str] = None
         
         if use_real and model_id:
-            # REAL mode: Download and quantize
-            model_path = download_and_quantize(model_id, recipe.bits)
+            # REAL mode: Download and quantize with full compression
+            sys.stderr.write(
+                f"Worker: Recipe - bits={recipe.bits}, "
+                f"pruning={recipe.pruning_ratio:.1%}, "
+                f"layers_to_drop={recipe.layers_to_drop}\n"
+            )
+            model_path = download_and_quantize(
+                model_id,
+                recipe.bits,
+                pruning_ratio=recipe.pruning_ratio,
+                layers_to_drop=recipe.layers_to_drop if recipe.layers_to_drop else None,
+            )
         else:
             # LEGACY mode: Find pre-downloaded model
+            # Note: Legacy mode doesn't support pruning/layer dropping
+            if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
+                sys.stderr.write(
+                    "Worker Warning: Pruning and layer dropping require --real-compression mode\n"
+                )
             model_path = find_cached_model(recipe)
             
             if model_path is None:
