@@ -36,9 +36,11 @@ def parse_args() -> argparse.Namespace:
         help="HuggingFace token for gated models (or set HF_TOKEN env var)",
     )
     group_target.add_argument(
-        "--legacy",
-        action="store_true",
-        help="[DEPRECATED] Use pre-downloaded GGUF files instead of real compression",
+        "--backend",
+        type=str,
+        default="gguf",
+        choices=["gguf", "bnb", "onnx"],
+        help="Quantization backend: gguf (llama.cpp), bnb (bitsandbytes), onnx (optimum)",
     )
 
     # Brain Configuration
