@@ -2,10 +2,14 @@
 
 This module provides the core compression functionality:
 - Downloading models from HuggingFace
-- Converting to GGUF format
+- Converting to GGUF format (llama.cpp)
 - Quantizing to various bit depths
 - Pruning and layer dropping
 - Evaluating model accuracy
+
+Advanced backends (optional):
+- BitsAndBytes: pip install sintra[bnb]
+- Optimum/ONNX: pip install sintra[onnx]
 """
 
 from .downloader import ModelDownloader, download_model
@@ -25,11 +29,33 @@ from .pruner import (
 )
 from .evaluator import AccuracyEvaluator, evaluate_perplexity
 
+# Optional backends - import only if available
+try:
+    from .bnb_quantizer import (
+        BitsAndBytesQuantizer,
+        BnBQuantType,
+        BitsAndBytesError,
+        is_bnb_available,
+    )
+except ImportError:
+    pass
+
+try:
+    from .onnx_optimizer import (
+        ONNXOptimizer,
+        OptimizationLevel,
+        QuantizationMode,
+        ONNXOptimizerError,
+        is_onnx_available,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     # Downloader
     "ModelDownloader",
     "download_model",
-    # Quantizer
+    # GGUF Quantizer (llama.cpp)
     "GGUFQuantizer",
     "QuantizationType",
     "quantize_model",
