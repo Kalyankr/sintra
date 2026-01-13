@@ -36,9 +36,9 @@ def parse_args() -> argparse.Namespace:
         help="HuggingFace token for gated models (or set HF_TOKEN env var)",
     )
     group_target.add_argument(
-        "--real-compression",
+        "--legacy",
         action="store_true",
-        help="Enable real compression (download, quantize). Requires llama.cpp",
+        help="[DEPRECATED] Use pre-downloaded GGUF files instead of real compression",
     )
 
     # Brain Configuration

@@ -3,9 +3,11 @@
 This module runs in a separate process to benchmark compressed models.
 It receives a ModelRecipe via stdin and outputs ExperimentResult as JSON.
 
-The worker can operate in two modes:
-1. REAL mode: Downloads, quantizes (with optional pruning), and benchmarks actual models
-2. LEGACY mode: Uses pre-downloaded GGUF files (backward compatible)
+The worker downloads HuggingFace models, applies compression (quantization,
+pruning, layer dropping), and benchmarks the resulting GGUF model.
+
+Legacy mode (pre-downloaded GGUF files) is deprecated but still supported
+by setting SINTRA_REAL_COMPRESSION=false.
 """
 
 import json
@@ -24,12 +26,14 @@ from sintra.profiles.models import ExperimentResult, ModelRecipe
 MODEL_ID_ENV = "SINTRA_MODEL_ID"
 CACHE_DIR_ENV = "SINTRA_CACHE_DIR"
 USE_REAL_COMPRESSION_ENV = "SINTRA_REAL_COMPRESSION"
+USE_LEGACY_MODE_ENV = "SINTRA_LEGACY_MODE"  # Deprecated
 
 
 def find_cached_model(recipe: ModelRecipe) -> Optional[str]:
-    """Find a pre-quantized model file in cache locations.
+    """[DEPRECATED] Find a pre-quantized model file in cache locations.
     
-    This is the legacy behavior - searching for pre-downloaded GGUF files.
+    This is legacy behavior - searching for pre-downloaded GGUF files.
+    Use download_and_quantize() for real compression instead.
     
     Args:
         recipe: The compression recipe specifying bits.
@@ -223,9 +227,10 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     """Perform the full compression and benchmarking pipeline.
     
     This function orchestrates:
-    1. Finding or creating the quantized model (with optional pruning)
-    2. Running the benchmark
-    3. Measuring accuracy
+    1. Downloading the model from HuggingFace
+    2. Applying compression (quantization, pruning, layer dropping)
+    3. Running the benchmark
+    4. Measuring accuracy
     
     Args:
         recipe: The compression recipe to apply (includes bits, pruning_ratio, layers_to_drop)
@@ -236,12 +241,13 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     try:
         # Check environment for model ID and mode
         model_id = os.environ.get(MODEL_ID_ENV)
-        use_real = os.environ.get(USE_REAL_COMPRESSION_ENV, "").lower() == "true"
+        # Real compression is now the default
+        use_real = os.environ.get(USE_REAL_COMPRESSION_ENV, "true").lower() == "true"
         
         model_path: Optional[str] = None
         
         if use_real and model_id:
-            # REAL mode: Download and quantize with full compression
+            # Default: Download and quantize with full compression
             sys.stderr.write(
                 f"Worker: Recipe - bits={recipe.bits}, "
                 f"pruning={recipe.pruning_ratio:.1%}, "
@@ -254,11 +260,15 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
                 layers_to_drop=recipe.layers_to_drop if recipe.layers_to_drop else None,
             )
         else:
-            # LEGACY mode: Find pre-downloaded model
+            # LEGACY mode (deprecated): Find pre-downloaded model
+            sys.stderr.write(
+                "Worker Warning: [DEPRECATED] Legacy mode is deprecated. "
+                "Use --model-id to enable real compression.\n"
+            )
             # Note: Legacy mode doesn't support pruning/layer dropping
             if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
                 sys.stderr.write(
-                    "Worker Warning: Pruning and layer dropping require --real-compression mode\n"
+                    "Worker Warning: Pruning and layer dropping require real compression mode\n"
                 )
             model_path = find_cached_model(recipe)
             
@@ -266,13 +276,8 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
                 # No cached model - provide helpful error
                 raise FileNotFoundError(
                     f"No GGUF model found for {recipe.bits}-bit quantization.\n"
-                    f"Options:\n"
-                    f"  1. Download a pre-quantized model:\n"
-                    f"     huggingface-cli download TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF "
-                    f"--local-dir models --include '*Q4_K_M*'\n"
-                    f"  2. Enable real compression (requires llama.cpp):\n"
-                    f"     export SINTRA_REAL_COMPRESSION=true\n"
-                    f"     export SINTRA_MODEL_ID=TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+                    f"Legacy mode is deprecated. Use real compression instead:\n"
+                    f"  sintra --model-id TinyLlama/TinyLlama-1.1B-Chat-v1.0 <profile>"
                 )
         
         # Run benchmark
