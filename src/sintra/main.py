@@ -67,19 +67,18 @@ def main():
         sys.exit(1)
 
     # Set up environment for worker subprocess
-    # Real compression is now the default (--legacy disables it)
-    if not args.legacy:
-        os.environ["SINTRA_REAL_COMPRESSION"] = "true"
-        os.environ["SINTRA_MODEL_ID"] = args.model_id
-        if args.hf_token:
-            os.environ["HF_TOKEN"] = args.hf_token
-        log_transition(
-            "System", f"Compression pipeline enabled for {args.model_id}", "hw.profile"
-        )
-    else:
-        log_transition(
-            "System", "[DEPRECATED] Using legacy mode with pre-downloaded GGUFs", "hw.profile"
-        )
+    os.environ["SINTRA_REAL_COMPRESSION"] = "true"
+    os.environ["SINTRA_MODEL_ID"] = args.model_id
+    os.environ["SINTRA_BACKEND"] = args.backend
+    if args.hf_token:
+        os.environ["HF_TOKEN"] = args.hf_token
+    
+    backend_names = {"gguf": "GGUF/llama.cpp", "bnb": "bitsandbytes", "onnx": "ONNX/Optimum"}
+    log_transition(
+        "System", 
+        f"Compression: {args.model_id} via {backend_names.get(args.backend, args.backend)}", 
+        "hw.profile"
+    )
 
     # Initialize State
     initial_state: SintraState = {
