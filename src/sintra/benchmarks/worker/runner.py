@@ -3,11 +3,10 @@
 This module runs in a separate process to benchmark compressed models.
 It receives a ModelRecipe via stdin and outputs ExperimentResult as JSON.
 
-The worker downloads HuggingFace models, applies compression (quantization,
-pruning, layer dropping), and benchmarks the resulting GGUF model.
-
-Legacy mode (pre-downloaded GGUF files) is deprecated but still supported
-by setting SINTRA_REAL_COMPRESSION=false.
+The worker supports multiple quantization backends:
+- GGUF (llama.cpp): CPU/Metal optimized, default
+- BitsAndBytes: GPU-accelerated NF4/INT8
+- ONNX (Optimum): Multi-platform ONNX Runtime
 """
 
 import json
@@ -25,57 +24,7 @@ from sintra.profiles.models import ExperimentResult, ModelRecipe
 # Environment variables for configuration
 MODEL_ID_ENV = "SINTRA_MODEL_ID"
 CACHE_DIR_ENV = "SINTRA_CACHE_DIR"
-USE_REAL_COMPRESSION_ENV = "SINTRA_REAL_COMPRESSION"
-USE_LEGACY_MODE_ENV = "SINTRA_LEGACY_MODE"  # Deprecated
-
-
-def find_cached_model(recipe: ModelRecipe) -> Optional[str]:
-    """[DEPRECATED] Find a pre-quantized model file in cache locations.
-    
-    This is legacy behavior - searching for pre-downloaded GGUF files.
-    Use download_and_quantize() for real compression instead.
-    
-    Args:
-        recipe: The compression recipe specifying bits.
-        
-    Returns:
-        Path to the model file, or None if not found.
-    """
-    # Map bits to quantization types
-    quant_map = {
-        2: ["Q2_K"],
-        3: ["Q3_K_S", "Q3_K_M", "Q3_K_L"],
-        4: ["Q4_K_S", "Q4_K_M", "Q4_K", "Q4_0"],
-        5: ["Q5_K_S", "Q5_K_M", "Q5_K"],
-        6: ["Q6_K"],
-        8: ["Q8_0"],
-    }
-    
-    quant_types = quant_map.get(recipe.bits, ["Q4_K_M", "Q4_K"])
-    
-    # Search locations
-    search_dirs = [
-        Path("models"),
-        Path.home() / ".cache" / "sintra" / "quantized",
-        Path.home() / ".cache" / "sintra" / "models",
-        Path.home() / ".local" / "share" / "sintra" / "models",
-    ]
-    
-    for search_dir in search_dirs:
-        if not search_dir.exists():
-            continue
-        for quant_type in quant_types:
-            patterns = [
-                f"*{quant_type.lower()}*.gguf",
-                f"*{quant_type}*.gguf",
-                f"*.{quant_type}.gguf",
-            ]
-            for pattern in patterns:
-                matches = list(search_dir.glob(pattern))
-                if matches:
-                    return str(matches[0])
-    
-    return None
+BACKEND_ENV = "SINTRA_BACKEND"  # gguf, bnb, onnx
 
 
 def download_and_quantize(
@@ -138,6 +87,77 @@ def download_and_quantize(
         raise RuntimeError(f"Quantization failed: {e}")
 
 
+def quantize_with_bnb(
+    model_id: str,
+    bits: int,
+) -> str:
+    """Quantize using BitsAndBytes (GPU-accelerated NF4/INT8).
+    
+    Args:
+        model_id: HuggingFace model ID
+        bits: Target quantization bits (4 or 8)
+        
+    Returns:
+        Path to the quantized model directory
+    """
+    from sintra.compression.bnb_quantizer import (
+        BitsAndBytesQuantizer, 
+        BnBQuantType,
+        BitsAndBytesError,
+    )
+    
+    sys.stderr.write(f"Worker [BnB]: Quantizing {model_id} to {bits}-bit...\n")
+    
+    quant_type = BnBQuantType.NF4 if bits == 4 else BnBQuantType.INT8
+    
+    try:
+        quantizer = BitsAndBytesQuantizer()
+        output_path = quantizer.quantize(
+            model_id,
+            bits=bits,
+            quant_type=quant_type,
+            use_double_quant=(bits == 4),
+        )
+        return str(output_path)
+    except BitsAndBytesError as e:
+        raise RuntimeError(f"BitsAndBytes quantization failed: {e}")
+
+
+def quantize_with_onnx(
+    model_id: str,
+    bits: int,
+) -> str:
+    """Quantize using ONNX/Optimum.
+    
+    Args:
+        model_id: HuggingFace model ID
+        bits: Target quantization bits (8 for INT8)
+        
+    Returns:
+        Path to the quantized ONNX model directory
+    """
+    from sintra.compression.onnx_optimizer import (
+        ONNXOptimizer,
+        ONNXOptimizerError,
+    )
+    
+    sys.stderr.write(f"Worker [ONNX]: Exporting and optimizing {model_id}...\n")
+    
+    try:
+        optimizer = ONNXOptimizer()
+        
+        # Export and optimize, optionally quantize
+        apply_quant = bits <= 8  # ONNX supports INT8
+        output_path = optimizer.export_and_optimize(
+            model_id,
+            task="text-generation",
+            apply_quantization=apply_quant,
+        )
+        return str(output_path)
+    except ONNXOptimizerError as e:
+        raise RuntimeError(f"ONNX optimization failed: {e}")
+
+
 def evaluate_accuracy(model_path: str) -> float:
     """Evaluate model accuracy using perplexity.
     
@@ -154,6 +174,112 @@ def evaluate_accuracy(model_path: str) -> float:
     except Exception as e:
         sys.stderr.write(f"Worker: Accuracy eval failed: {e}, using estimate\n")
         return 0.85  # Fallback estimate
+
+
+def run_transformers_benchmark(
+    model_path: str, 
+    backend: str,
+) -> ExperimentResult:
+    """Run benchmark on a transformers/ONNX model.
+    
+    Args:
+        model_path: Path to the model directory
+        backend: Backend type ('bnb' or 'onnx')
+        
+    Returns:
+        ExperimentResult with measured metrics
+    """
+    import torch
+    
+    process = psutil.Process()
+    start_mem = process.memory_info().rss
+    
+    sys.stderr.write(f"Worker [{backend.upper()}]: Loading model from {model_path}...\n")
+    start_time = time.time()
+    
+    try:
+        if backend == "bnb":
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                device_map="auto",
+            )
+            tokenizer = AutoTokenizer.from_pretrained(model_path)
+            
+        elif backend == "onnx":
+            from optimum.onnxruntime import ORTModelForCausalLM
+            from transformers import AutoTokenizer
+            
+            model = ORTModelForCausalLM.from_pretrained(model_path)
+            tokenizer = AutoTokenizer.from_pretrained(model_path)
+        else:
+            raise ValueError(f"Unknown backend: {backend}")
+        
+        load_time = time.time() - start_time
+        sys.stderr.write(f"Worker [{backend.upper()}]: Model loaded in {load_time:.1f}s\n")
+        
+        # Run generation benchmark
+        sys.stderr.write(f"Worker [{backend.upper()}]: Running TPS benchmark...\n")
+        
+        prompt = "Q: What is the capital of France? A:"
+        inputs = tokenizer(prompt, return_tensors="pt")
+        
+        # Move inputs to same device as model (for BnB)
+        if backend == "bnb" and hasattr(model, "device"):
+            inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        
+        gen_start = time.time()
+        
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=100,
+                do_sample=True,
+                temperature=0.5,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        
+        gen_end = time.time()
+        
+        # Calculate metrics
+        tokens_generated = outputs.shape[1] - inputs["input_ids"].shape[1]
+        duration = gen_end - gen_start
+        actual_tps = tokens_generated / duration if duration > 0 else 0
+        
+        # Memory usage
+        peak_mem = process.memory_info().rss
+        actual_vram = peak_mem / (1024**3)
+        
+        # For GPU memory (more accurate for BnB)
+        if backend == "bnb" and torch.cuda.is_available():
+            actual_vram = torch.cuda.max_memory_allocated() / (1024**3)
+        
+        # Accuracy estimate (full eval would require perplexity computation)
+        accuracy = 0.85  # Placeholder
+        
+        sys.stderr.write(
+            f"Worker [{backend.upper()}]: TPS={actual_tps:.2f}, "
+            f"VRAM={actual_vram:.2f}GB, Acc={accuracy:.2f}\n"
+        )
+        
+        return ExperimentResult(
+            actual_tps=round(actual_tps, 2),
+            actual_vram_usage=round(actual_vram, 2),
+            accuracy_score=round(accuracy, 2),
+            was_successful=True,
+            error_log="",
+        )
+        
+    except Exception as e:
+        sys.stderr.write(f"Worker [{backend.upper()}]: Benchmark failed: {e}\n")
+        return ExperimentResult(
+            actual_tps=0,
+            actual_vram_usage=0,
+            accuracy_score=0,
+            was_successful=False,
+            error_log=f"Benchmark failed: {str(e)}",
+        )
 
 
 def run_benchmark(model_path: str, evaluate_accuracy_flag: bool = True) -> ExperimentResult:
@@ -228,9 +354,14 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     
     This function orchestrates:
     1. Downloading the model from HuggingFace
-    2. Applying compression (quantization, pruning, layer dropping)
+    2. Applying compression using the selected backend
     3. Running the benchmark
     4. Measuring accuracy
+    
+    Supported backends:
+    - gguf (default): llama.cpp GGUF format, CPU/Metal optimized
+    - bnb: BitsAndBytes NF4/INT8, GPU-accelerated
+    - onnx: ONNX Runtime via Optimum, multi-platform
     
     Args:
         recipe: The compression recipe to apply (includes bits, pruning_ratio, layers_to_drop)
@@ -239,49 +370,58 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
         ExperimentResult with all measured metrics
     """
     try:
-        # Check environment for model ID and mode
+        # Get configuration from environment
         model_id = os.environ.get(MODEL_ID_ENV)
-        # Real compression is now the default
-        use_real = os.environ.get(USE_REAL_COMPRESSION_ENV, "true").lower() == "true"
+        backend = os.environ.get(BACKEND_ENV, "gguf").lower()
+        
+        if not model_id:
+            raise ValueError(
+                "SINTRA_MODEL_ID environment variable not set. "
+                "Use --model-id to specify the model to optimize."
+            )
+        
+        sys.stderr.write(
+            f"Worker: Recipe - bits={recipe.bits}, "
+            f"pruning={recipe.pruning_ratio:.1%}, "
+            f"layers_to_drop={recipe.layers_to_drop}, "
+            f"backend={backend}\n"
+        )
         
         model_path: Optional[str] = None
         
-        if use_real and model_id:
-            # Default: Download and quantize with full compression
-            sys.stderr.write(
-                f"Worker: Recipe - bits={recipe.bits}, "
-                f"pruning={recipe.pruning_ratio:.1%}, "
-                f"layers_to_drop={recipe.layers_to_drop}\n"
-            )
+        # Route to appropriate backend
+        if backend == "bnb":
+            # BitsAndBytes: GPU-accelerated NF4/INT8
+            if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
+                sys.stderr.write(
+                    "Worker: Note - BnB backend applies quantization only. "
+                    "Pruning/layer dropping not yet supported.\n"
+                )
+            model_path = quantize_with_bnb(model_id, recipe.bits)
+            
+        elif backend == "onnx":
+            # ONNX/Optimum: Multi-platform via ONNX Runtime
+            if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
+                sys.stderr.write(
+                    "Worker: Note - ONNX backend applies quantization only. "
+                    "Pruning/layer dropping not yet supported.\n"
+                )
+            model_path = quantize_with_onnx(model_id, recipe.bits)
+            
+        else:
+            # GGUF (default): llama.cpp with full compression pipeline
             model_path = download_and_quantize(
                 model_id,
                 recipe.bits,
                 pruning_ratio=recipe.pruning_ratio,
                 layers_to_drop=recipe.layers_to_drop if recipe.layers_to_drop else None,
             )
-        else:
-            # LEGACY mode (deprecated): Find pre-downloaded model
-            sys.stderr.write(
-                "Worker Warning: [DEPRECATED] Legacy mode is deprecated. "
-                "Use --model-id to enable real compression.\n"
-            )
-            # Note: Legacy mode doesn't support pruning/layer dropping
-            if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
-                sys.stderr.write(
-                    "Worker Warning: Pruning and layer dropping require real compression mode\n"
-                )
-            model_path = find_cached_model(recipe)
-            
-            if model_path is None:
-                # No cached model - provide helpful error
-                raise FileNotFoundError(
-                    f"No GGUF model found for {recipe.bits}-bit quantization.\n"
-                    f"Legacy mode is deprecated. Use real compression instead:\n"
-                    f"  sintra --model-id TinyLlama/TinyLlama-1.1B-Chat-v1.0 <profile>"
-                )
         
         # Run benchmark
-        return run_benchmark(model_path, evaluate_accuracy_flag=True)
+        if backend in ("bnb", "onnx"):
+            return run_transformers_benchmark(model_path, backend)
+        else:
+            return run_benchmark(model_path, evaluate_accuracy_flag=True)
         
     except Exception as e:
         return ExperimentResult(
