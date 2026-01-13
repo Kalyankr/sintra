@@ -24,6 +24,30 @@ dependencies = [
     "transformers>=4.57.3",
 ]
 
+[project.optional-dependencies]
+# Advanced quantization backends
+bnb = [
+    "bitsandbytes>=0.45.0",
+    "accelerate>=1.0.0",
+]
+onnx = [
+    "optimum[onnxruntime]>=1.24.0",
+    "onnx>=1.17.0",
+]
+# LLM providers
+anthropic = ["langchain-anthropic"]
+google = ["langchain-google-genai"]
+# All extras
+all = [
+    "bitsandbytes>=0.45.0",
+    "accelerate>=1.0.0",
+    "optimum[onnxruntime]>=1.24.0",
+    "onnx>=1.17.0",
+    "langchain-anthropic",
+    "langchain-google-genai",
+    "langchain-openai",
+]
+
 [project.scripts]
 sintra = "sintra:main"
 
@@ -88,8 +112,3 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "raise NotImplementedError",
 ]
-
-[project.optional-dependencies]
-anthropic = ["langchain-anthropic"]
-google = ["langchain-google-genai"]
-all = ["langchain-anthropic", "langchain-google-genai", "langchain-openai"]
