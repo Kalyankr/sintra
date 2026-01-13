@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Agent workflow nodes for the Sintra optimization loop."""
 
 import json
@@ -11,7 +10,7 @@ from sintra.profiles.models import ModelRecipe
 from sintra.ui.console import log_transition
 
 from .state import SintraState
-from .utils import format_history_for_llm
+from .utils import format_history_for_llm, get_untried_variations, is_duplicate_recipe
 
 # Configuration constants
 MAX_ITERATIONS = 10
@@ -24,6 +23,7 @@ StateUpdate = Dict[str, Any]
 
 class LLMConnectionError(Exception):
     """Raised when the LLM service is unavailable or connection fails."""
+
     pass
 
 
@@ -56,17 +56,30 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     history = state.get("history", [])
 
-    # Create a string of previous attempts to shame the AI into changing
+    # Create a string of previous attempts to prevent repeats
     past_attempts = ""
     for i, entry in enumerate(history):
         recipe = entry.get("recipe")
         metrics = entry.get("metrics")
         past_attempts += (
-            f"- Attempt {i}: Recipe {recipe} failed with TPS: {metrics.actual_tps}\n"
+            f"- Attempt {i + 1}: bits={recipe.bits}, pruning={recipe.pruning_ratio:.2f}, "
+            f"layers_dropped={recipe.layers_to_drop} → TPS={metrics.actual_tps:.1f}, "
+            f"accuracy={metrics.accuracy_score:.2f}\n"
         )
 
+    # Get suggestions for untried combinations
+    variations = get_untried_variations(history) if history else {}
+    untried_hint = ""
+    if variations:
+        if variations.get("untried_bits"):
+            untried_hint += f"\n- Untried bit widths: {variations['untried_bits']}"
+        if variations.get("untried_pruning"):
+            untried_hint += (
+                f"\n- Untried pruning ratios: {variations['untried_pruning']}"
+            )
+
     system_prompt = f"""
-    You are **Sintra**, an expert LLM Compression Architect.  
+    You are **Sintra**, an expert LLM Compression Architect.
     Your mission is to design an optimal compression recipe for the model belonging to: {profile.name}.  
     You must balance speed, accuracy, and VRAM efficiency using quantization, pruning, and layer dropping.
 
@@ -85,8 +98,8 @@ def architect_node(state: SintraState) -> StateUpdate:
     ====================================================
     CONSTRAINTS
     ====================================================
-    - VRAM Limit: {profile.constraints.vram_gb} GB  
-    - Target TPS (tokens/sec): {profile.targets.min_tokens_per_second}  
+    - VRAM Limit: {profile.constraints.vram_gb} GB
+    - Target TPS (tokens/sec): {profile.targets.min_tokens_per_second}
     - Target Accuracy Score: {profile.targets.min_accuracy_score}
 
     ====================================================
@@ -101,26 +114,26 @@ def architect_node(state: SintraState) -> StateUpdate:
     5. You may use any compression strategy, but the final recipe must obey all constraints.
 
     ====================================================
-    PAST FAILURES (DO NOT REPEAT)
+    PAST ATTEMPTS (NEVER REPEAT THESE)
     ====================================================
     {past_attempts}
+    {untried_hint}
 
-    - You MUST NOT repeat any failed recipe.
-    - A recipe counts as "repeated" if **bits**, **pruning_ratio**, AND **layers_to_drop** all match a past failure.
-    - If a recipe failed, you MUST change at least one of:
-        -> bits  
-        -> pruning_ratio  
-        -> layers_to_drop
+    CRITICAL: You MUST propose a DIFFERENT recipe than all past attempts.
+    - Change AT LEAST ONE of: bits, pruning_ratio, or layers_to_drop
+    - If bits=4 and pruning=0.2 was tried, try bits=3 or pruning=0.3
+    - Prefer untried combinations listed above
+    - Small changes (e.g., pruning 0.20 → 0.21) count as duplicates!
 
     ====================================================
     REASONING RULES (INTERNAL ONLY)
     ====================================================
     - Think step-by-step internally, but output ONLY the final JSON.
     - Internally evaluate:
-        - VRAM feasibility  
-        - Expected TPS  
-        - Expected accuracy impact  
-        - Differences from past failures  
+        - VRAM feasibility
+        - Expected TPS
+        - Expected accuracy impact
+        - Differences from past failures
     - Never reveal your reasoning or internal thoughts.
 
     ====================================================
@@ -143,21 +156,29 @@ def architect_node(state: SintraState) -> StateUpdate:
     except Exception as e:
         # Check for connection-related errors
         error_str = str(e).lower()
-        if any(term in error_str for term in ["connection", "refused", "timeout", "unreachable", "connect"]):
+        if any(
+            term in error_str
+            for term in ["connection", "refused", "timeout", "unreachable", "connect"]
+        ):
             provider = state["llm_config"].provider.value
             raise LLMConnectionError(
-                f"Cannot connect to {provider} LLM service. "
-                f"Original error: {e}"
+                f"Cannot connect to {provider} LLM service. Original error: {e}"
             ) from e
         # Check for API key errors
-        if any(term in error_str for term in ["api_key", "api key", "authentication", "unauthorized", "401"]):
+        if any(
+            term in error_str
+            for term in ["api_key", "api key", "authentication", "unauthorized", "401"]
+        ):
             provider = state["llm_config"].provider.value
             raise LLMConnectionError(
                 f"Authentication failed for {provider}. Check your API key. "
                 f"Original error: {e}"
             ) from e
         # Check for rate limiting
-        if any(term in error_str for term in ["rate limit", "rate_limit", "429", "too many requests"]):
+        if any(
+            term in error_str
+            for term in ["rate limit", "rate_limit", "429", "too many requests"]
+        ):
             raise LLMConnectionError(
                 f"Rate limited by LLM provider. Please wait and try again. "
                 f"Original error: {e}"
@@ -167,8 +188,65 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     # Validate we got a proper recipe back
     if new_recipe is None:
-        log_transition("Architect", "LLM returned empty response, using fallback recipe", "status.warn")
-        new_recipe = ModelRecipe(bits=4, pruning_ratio=0.1, layers_to_drop=[], method="GGUF")
+        log_transition(
+            "Architect",
+            "LLM returned empty response, using fallback recipe",
+            "status.warn",
+        )
+        new_recipe = ModelRecipe(
+            bits=4, pruning_ratio=0.1, layers_to_drop=[], method="GGUF"
+        )
+
+    # DUPLICATE DETECTION: Prevent running the same experiment twice
+    max_retries = 3
+    retry_count = 0
+    original_recipe = new_recipe
+
+    while is_duplicate_recipe(new_recipe, history) and retry_count < max_retries:
+        retry_count += 1
+        log_transition(
+            "Architect",
+            f"Duplicate recipe detected! Auto-modifying (attempt {retry_count}/{max_retries})",
+            "status.warn",
+        )
+
+        # Programmatically modify the recipe to make it unique
+        # Strategy: cycle through bits, then pruning ratio
+        bit_options = [2, 3, 4, 5, 6, 8]
+        current_bit_idx = (
+            bit_options.index(new_recipe.bits) if new_recipe.bits in bit_options else 2
+        )
+
+        # Try next bit width first
+        new_bits = bit_options[(current_bit_idx + retry_count) % len(bit_options)]
+
+        # Also adjust pruning ratio
+        new_pruning = round(min(0.5, new_recipe.pruning_ratio + 0.1 * retry_count), 2)
+
+        new_recipe = ModelRecipe(
+            bits=new_bits,
+            pruning_ratio=new_pruning,
+            layers_to_drop=new_recipe.layers_to_drop,
+            method=new_recipe.method,
+        )
+        log_transition(
+            "Architect",
+            f"Modified to: {new_recipe.bits}-bit, {new_recipe.pruning_ratio:.0%} pruning",
+            "arch.node",
+        )
+
+    if retry_count > 0 and is_duplicate_recipe(new_recipe, history):
+        log_transition(
+            "Architect",
+            "Could not find unique recipe after retries. Forcing convergence.",
+            "status.warn",
+        )
+        return {
+            "current_recipe": new_recipe,
+            "iteration": state.get("iteration", 0) + 1,
+            "is_converged": True,
+            "critic_feedback": "Search space exhausted - no new recipes to try.",
+        }
 
     current_iter = state.get("iteration", 0)
     return {"current_recipe": new_recipe, "iteration": current_iter + 1}
@@ -215,9 +293,11 @@ def critic_node(state: SintraState) -> dict:
                 is_better = True
         else:
             best_metrics = current_best["metrics"]
-            if metrics.actual_tps > best_metrics.actual_tps:
-                if metrics.accuracy_score >= targets.min_accuracy_score:
-                    is_better = True
+            if (
+                metrics.actual_tps > best_metrics.actual_tps
+                and metrics.accuracy_score >= targets.min_accuracy_score
+            ):
+                is_better = True
 
     # Advice Logic
     feedback = []
@@ -310,15 +390,18 @@ def reporter_node(state: SintraState) -> dict:
         DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         with open(DEFAULT_OUTPUT_FILE, "w") as f:
             json.dump(output, f, indent=4)
-        log_transition("Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success")
-    except (IOError, OSError) as e:
         log_transition(
-            "Reporter", 
-            f"Warning: Could not save to file: {e}. Printing to console instead.", 
-            "status.warn"
+            "Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success"
+        )
+    except OSError as e:
+        log_transition(
+            "Reporter",
+            f"Warning: Could not save to file: {e}. Printing to console instead.",
+            "status.warn",
         )
         # Fallback: print to console
         from sintra.ui.console import console
+
         console.print_json(data=output)
 
     return state

@@ -98,9 +98,7 @@ def main():
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
     )
     if not args.debug:
-        log_transition(
-            "System", f"Optimizing: {args.model_id}", "hw.profile"
-        )
+        log_transition("System", f"Optimizing: {args.model_id}", "hw.profile")
 
     # Run Workflow
     app = build_sintra_workflow()
@@ -114,7 +112,9 @@ def main():
         console.print(f"\n[bold red]✗ Missing API Key[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Setup:[/dim]")
-        console.print("  1. Copy .env.example to .env: [cyan]cp .env.example .env[/cyan]")
+        console.print(
+            "  1. Copy .env.example to .env: [cyan]cp .env.example .env[/cyan]"
+        )
         console.print("  2. Edit .env and add your API key")
         console.print("  3. Or export it: [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
         sys.exit(1)
@@ -124,8 +124,12 @@ def main():
         console.print("\n[dim]Suggestions:[/dim]")
         if args.provider == "ollama":
             console.print("  • Start Ollama: [cyan]ollama serve[/cyan]")
-            console.print("  • Or use debug mode: [cyan]sintra --debug <profile>[/cyan]")
-        console.print("  • Or try a different provider: [cyan]--provider openai --model gpt-4o[/cyan]")
+            console.print(
+                "  • Or use debug mode: [cyan]sintra --debug <profile>[/cyan]"
+            )
+        console.print(
+            "  • Or try a different provider: [cyan]--provider openai --model gpt-4o[/cyan]"
+        )
         sys.exit(1)
     except KeyboardInterrupt:
         console.print("\n[yellow]Optimization cancelled by user[/yellow]")
@@ -141,6 +145,7 @@ def main():
         if args.debug:
             # In debug mode, show full traceback
             import traceback
+
             console.print("\n[dim]Full traceback:[/dim]")
             console.print(traceback.format_exc())
         sys.exit(1)

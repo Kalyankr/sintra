@@ -2,7 +2,11 @@
 
 import pytest
 
-from sintra.agents.utils import format_history_for_llm
+from sintra.agents.utils import (
+    format_history_for_llm,
+    get_untried_variations,
+    is_duplicate_recipe,
+)
 from sintra.profiles.models import ExperimentResult, ModelRecipe
 
 
@@ -106,3 +110,138 @@ class TestFormatHistoryForLlm:
         result = format_history_for_llm(history)
 
         assert "25.0%" in result
+
+
+class TestIsDuplicateRecipe:
+    """Tests for is_duplicate_recipe function."""
+
+    def test_empty_history_not_duplicate(self) -> None:
+        """Test that any recipe is not duplicate with empty history."""
+        recipe = ModelRecipe(bits=4, pruning_ratio=0.2)
+        assert is_duplicate_recipe(recipe, []) is False
+
+    def test_exact_match_is_duplicate(self) -> None:
+        """Test that exact match is detected as duplicate."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2, layers_to_drop=[]),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        recipe = ModelRecipe(bits=4, pruning_ratio=0.2, layers_to_drop=[])
+        assert is_duplicate_recipe(recipe, history) is True
+
+    def test_different_bits_not_duplicate(self) -> None:
+        """Test that different bits means not duplicate."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        recipe = ModelRecipe(bits=8, pruning_ratio=0.2)
+        assert is_duplicate_recipe(recipe, history) is False
+
+    def test_different_pruning_not_duplicate(self) -> None:
+        """Test that significantly different pruning is not duplicate."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        recipe = ModelRecipe(bits=4, pruning_ratio=0.4)
+        assert is_duplicate_recipe(recipe, history) is False
+
+    def test_within_tolerance_is_duplicate(self) -> None:
+        """Test that pruning within tolerance counts as duplicate."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.20),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        # 0.22 is within 0.05 tolerance of 0.20
+        recipe = ModelRecipe(bits=4, pruning_ratio=0.22)
+        assert is_duplicate_recipe(recipe, history) is True
+
+    def test_different_layers_not_duplicate(self) -> None:
+        """Test that different layers_to_drop is not duplicate."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2, layers_to_drop=[]),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        recipe = ModelRecipe(bits=4, pruning_ratio=0.2, layers_to_drop=[1, 2])
+        assert is_duplicate_recipe(recipe, history) is False
+
+
+class TestGetUntriedVariations:
+    """Tests for get_untried_variations function."""
+
+    def test_empty_history_returns_all_options(self) -> None:
+        """Test that empty history returns all possible options."""
+        result = get_untried_variations([])
+        assert 4 in result["untried_bits"]
+        assert 8 in result["untried_bits"]
+        assert 0.2 in result["untried_pruning"]
+
+    def test_filters_tried_bits(self) -> None:
+        """Test that tried bits are excluded from suggestions."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        result = get_untried_variations(history)
+        assert 4 not in result["untried_bits"]
+        assert 8 in result["untried_bits"]
+
+    def test_tracks_tried_combinations(self) -> None:
+        """Test that tried combinations are listed."""
+        history = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.2),
+                "metrics": ExperimentResult(
+                    actual_tps=50.0,
+                    actual_vram_usage=4.0,
+                    accuracy_score=0.7,
+                    was_successful=True,
+                ),
+            }
+        ]
+        result = get_untried_variations(history)
+        assert len(result["tried_combinations"]) == 1
+        assert "4-bit" in result["tried_combinations"][0]
