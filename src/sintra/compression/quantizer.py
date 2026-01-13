@@ -1,6 +1,7 @@
 """GGUF model quantization using llama.cpp.
 
 Provides quantization of GGUF models to various bit depths.
+Supports pre-quantization pruning and layer dropping.
 """
 
 import logging
@@ -284,6 +285,71 @@ class GGUFQuantizer:
         """List cached quantizations for a model."""
         pattern = f"{model_name.lower()}*.gguf"
         return list(self.quantized_dir.glob(pattern))
+    
+    def quantize_with_compression(
+        self,
+        model_path: Path,
+        bits: int,
+        pruning_ratio: float = 0.0,
+        layers_to_drop: Optional[list[int]] = None,
+        model_name: Optional[str] = None,
+    ) -> Path:
+        """Quantize with optional pruning and layer dropping.
+        
+        Applies compression in order:
+        1. Layer dropping (if specified)
+        2. Structured pruning (if ratio > 0)
+        3. GGUF conversion and quantization
+        
+        Args:
+            model_path: Path to HuggingFace model directory
+            bits: Target bit depth
+            pruning_ratio: Fraction of weights to prune (0.0-1.0)
+            layers_to_drop: Layer indices to remove
+            model_name: Optional name for output file
+            
+        Returns:
+            Path to quantized GGUF file
+        """
+        from .pruner import apply_compression
+        
+        # Build descriptive output name
+        if model_name is None:
+            model_name = model_path.name.lower().replace("--", "-")
+        
+        # Add compression info to name
+        name_parts = [model_name]
+        if layers_to_drop:
+            name_parts.append(f"dropped{len(layers_to_drop)}")
+        if pruning_ratio > 0:
+            name_parts.append(f"pruned{int(pruning_ratio * 100)}pct")
+        
+        full_name = "-".join(name_parts)
+        
+        # Check if final quantized file already exists
+        quant_type = BITS_TO_QUANT.get(bits, QuantizationType.Q4_K_M)
+        output_file = self.quantized_dir / f"{full_name}-{quant_type.value.lower()}.gguf"
+        
+        if output_file.exists():
+            logger.info(f"Quantized model already exists: {output_file}")
+            return output_file
+        
+        # Apply pruning/layer dropping if requested
+        compressed_path = model_path
+        if layers_to_drop or pruning_ratio > 0:
+            logger.info(
+                f"Applying compression: layers_to_drop={layers_to_drop}, "
+                f"pruning_ratio={pruning_ratio:.1%}"
+            )
+            compressed_path = apply_compression(
+                model_path,
+                pruning_ratio=pruning_ratio,
+                layers_to_drop=layers_to_drop,
+                cache_dir=self.cache_dir,
+            )
+        
+        # Now quantize the (possibly compressed) model
+        return self.quantize(compressed_path, bits, full_name)
 
 
 def quantize_model(
@@ -305,3 +371,30 @@ def quantize_model(
     """
     quantizer = GGUFQuantizer(cache_dir=cache_dir)
     return quantizer.quantize(model_path, bits, model_name)
+
+
+def quantize_with_compression(
+    model_path: Path,
+    bits: int,
+    pruning_ratio: float = 0.0,
+    layers_to_drop: Optional[list[int]] = None,
+    cache_dir: Optional[Path] = None,
+    model_name: Optional[str] = None,
+) -> Path:
+    """Convenience function to quantize with pruning/layer dropping.
+    
+    Args:
+        model_path: Path to HuggingFace model directory
+        bits: Target bit depth
+        pruning_ratio: Fraction of weights to prune
+        layers_to_drop: Layer indices to remove
+        cache_dir: Optional cache directory
+        model_name: Optional output name
+        
+    Returns:
+        Path to quantized GGUF
+    """
+    quantizer = GGUFQuantizer(cache_dir=cache_dir)
+    return quantizer.quantize_with_compression(
+        model_path, bits, pruning_ratio, layers_to_drop, model_name
+    )
