@@ -90,9 +90,9 @@ def architect_node(state: SintraState) -> StateUpdate:
     ====================================================
     - Output **ONLY valid JSON**. No explanations, no comments.
     - JSON must contain exactly one object with the keys:
-        - "bits": integer (e.g., 4, 8)
+        - "bits": integer (2, 3, 4, 5, 6, or 8)
         - "pruning_ratio": decimal between 0.0 and 1.0 (e.g., 0.25)
-        - "layers_to_drop": list of integers OR an empty list
+        - "layers_to_drop": list of layer indices (0-indexed) OR an empty list
     - Never output whole numbers like 20 or 50 for pruning. Only decimals.
 
     ====================================================
@@ -103,15 +103,51 @@ def architect_node(state: SintraState) -> StateUpdate:
     - Target Accuracy Score: {profile.targets.min_accuracy_score}
 
     ====================================================
-    OPTIMIZATION RULES
+    COMPRESSION TECHNIQUES (Now Fully Implemented!)
     ====================================================
-    1. Always propose a **ModelRecipe** using quantization + pruning + layer dropping.
-    2. If TPS is too low:
-        -> decrease bits OR increase pruning_ratio OR increase layers_to_drop.
-    3. If Accuracy is too low:
-        -> increase bits OR decrease pruning_ratio OR reduce layers_to_drop.
-    4. Always ensure the recipe fits within the VRAM limit.
-    5. You may use any compression strategy, but the final recipe must obey all constraints.
+    
+    **1. QUANTIZATION (bits):**
+    - Controls numerical precision of weights
+    - Lower bits = smaller model, faster inference, lower accuracy
+    - Supported: 2, 3, 4, 5, 6, 8 bits
+    - Impact: ~12-15% size reduction per bit level
+    - Recommended: Start with 4-bit (Q4_K_M), good balance
+    
+    **2. STRUCTURED PRUNING (pruning_ratio):**
+    - Zeros out smallest-magnitude weights in attention/MLP layers
+    - Range: 0.0 (no pruning) to 0.5 (aggressive)
+    - Impact on TPS: +5-15% per 0.1 pruning ratio
+    - Impact on accuracy: -2-5% per 0.1 pruning ratio
+    - Guidelines:
+        - 0.0-0.1: Safe, minimal quality loss
+        - 0.1-0.2: Noticeable speedup, slight quality loss
+        - 0.2-0.3: Significant speedup, moderate quality loss
+        - >0.3: Aggressive, may hurt accuracy significantly
+    
+    **3. LAYER DROPPING (layers_to_drop):**
+    - Removes entire transformer layers from the model
+    - Most aggressive compression - removes ~1/N of model per layer
+    - Impact: Each dropped layer reduces params by ~1/total_layers
+    - Guidelines:
+        - Prefer dropping middle layers (less critical than first/last)
+        - Dropping 10-20% of layers: Minimal quality loss
+        - Dropping 20-40%: Noticeable degradation
+        - Dropping >40%: Significant quality loss
+    - Example for 32-layer model: layers_to_drop=[10, 11, 12, 20, 21, 22]
+
+    ====================================================
+    OPTIMIZATION STRATEGY
+    ====================================================
+    1. Start conservative: bits=4, pruning_ratio=0.0, layers_to_drop=[]
+    2. If TPS too low:
+        - First: Reduce bits (4→3→2)
+        - Second: Add pruning (0.1→0.2→0.3)
+        - Third: Drop layers (start with middle layers)
+    3. If accuracy too low:
+        - Increase bits (4→5→6→8)
+        - Reduce pruning ratio
+        - Remove fewer layers
+    4. Combine techniques for fine-grained control
 
     ====================================================
     PAST ATTEMPTS (NEVER REPEAT THESE)
@@ -131,8 +167,8 @@ def architect_node(state: SintraState) -> StateUpdate:
     - Think step-by-step internally, but output ONLY the final JSON.
     - Internally evaluate:
         - VRAM feasibility
-        - Expected TPS
-        - Expected accuracy impact
+        - Expected TPS (consider all three techniques)
+        - Expected accuracy impact (cumulative from all techniques)
         - Differences from past failures
     - Never reveal your reasoning or internal thoughts.
 
