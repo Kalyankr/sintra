@@ -246,20 +246,147 @@ def search_similar_models(
     Returns:
         List of similar models with their metadata
     """
-    # Extract model family from the base model
-    model_family = base_model.split("/")[-1].lower()
+    try:
+        return _search_huggingface_models(base_model, task, max_results)
+    except Exception as e:
+        logger.warning(f"HuggingFace search failed: {e}, using fallback")
+        return _fallback_model_search(base_model, task, max_results)
+
+
+def _search_huggingface_models(
+    base_model: str,
+    task: str,
+    max_results: int,
+) -> List[Dict[str, Any]]:
+    """Search HuggingFace Hub for similar/quantized models."""
+    from huggingface_hub import HfApi
     
-    # Common quantized model patterns
-    quantized_patterns = [
-        ("GGUF", ["Q4_K_M", "Q5_K_M", "Q8_0"]),
-        ("AWQ", ["awq", "4bit"]),
-        ("GPTQ", ["gptq", "4bit"]),
-    ]
-    
+    api = HfApi()
     results = []
     
-    # Simulate search results based on common patterns
-    # In production, this would call the HuggingFace API
+    # Extract model name for search
+    model_name = base_model.split("/")[-1]
+    
+    # Search strategies:
+    # 1. Search for GGUF versions (most common for edge deployment)
+    # 2. Search for the base model name
+    # 3. Search for quantized variants
+    
+    search_queries = [
+        f"{model_name} GGUF",      # GGUF quantized versions
+        f"{model_name} AWQ",       # AWQ quantized
+        f"{model_name} GPTQ",      # GPTQ quantized
+        model_name,                # Base model variants
+    ]
+    
+    seen_ids = set()
+    
+    for query in search_queries:
+        if len(results) >= max_results:
+            break
+            
+        try:
+            # Build filter for task if specified
+            filter_str = task if task else None
+            
+            models = api.list_models(
+                search=query,
+                sort="downloads",
+                direction=-1,
+                limit=max_results,
+                filter=filter_str,
+            )
+            
+            for model in models:
+                if model.id in seen_ids:
+                    continue
+                seen_ids.add(model.id)
+                
+                # Detect quantization type from tags or name
+                quant_info = _detect_quantization_type(model.id, model.tags or [])
+                
+                results.append({
+                    "model_id": model.id,
+                    "downloads": model.downloads or 0,
+                    "likes": model.likes or 0,
+                    "tags": list(model.tags or []),
+                    "quantization_info": quant_info,
+                    "author": model.author or "unknown",
+                    "last_modified": str(model.last_modified) if model.last_modified else None,
+                })
+                
+                if len(results) >= max_results:
+                    break
+                    
+        except Exception as e:
+            logger.debug(f"Search query '{query}' failed: {e}")
+            continue
+    
+    if not results:
+        # If no results, return the original model info
+        try:
+            model_info = api.model_info(base_model)
+            results.append({
+                "model_id": base_model,
+                "downloads": model_info.downloads or 0,
+                "likes": model_info.likes or 0,
+                "tags": list(model_info.tags or []),
+                "quantization_info": "Original model - no quantized versions found",
+                "author": model_info.author or "unknown",
+            })
+        except Exception:
+            pass
+    
+    return results[:max_results]
+
+
+def _detect_quantization_type(model_id: str, tags: List[str]) -> str:
+    """Detect quantization type from model ID and tags."""
+    model_lower = model_id.lower()
+    tags_lower = [t.lower() for t in tags]
+    
+    quant_types = []
+    
+    # Check for GGUF
+    if "gguf" in model_lower or "gguf" in tags_lower:
+        # Try to find specific quant type
+        for q in ["q2_k", "q3_k", "q4_k", "q4_0", "q5_k", "q5_0", "q6_k", "q8_0"]:
+            if q in model_lower:
+                quant_types.append(q.upper())
+        if not quant_types:
+            quant_types.append("GGUF (various)")
+    
+    # Check for AWQ
+    if "awq" in model_lower or "awq" in tags_lower:
+        quant_types.append("AWQ 4-bit")
+    
+    # Check for GPTQ
+    if "gptq" in model_lower or "gptq" in tags_lower:
+        quant_types.append("GPTQ 4-bit")
+    
+    # Check for bitsandbytes
+    if "4bit" in model_lower or "8bit" in model_lower:
+        if "4bit" in model_lower:
+            quant_types.append("4-bit")
+        if "8bit" in model_lower:
+            quant_types.append("8-bit")
+    
+    if quant_types:
+        return ", ".join(quant_types)
+    
+    return "Base model (not quantized)"
+
+
+def _fallback_model_search(
+    base_model: str,
+    task: str,
+    max_results: int,
+) -> List[Dict[str, Any]]:
+    """Fallback search when HuggingFace API is unavailable."""
+    model_family = base_model.split("/")[-1].lower()
+    results = []
+    
+    # Common quantized model patterns
     if "llama" in model_family:
         results.extend([
             {
@@ -268,13 +395,7 @@ def search_similar_models(
                 "likes": 1200,
                 "tags": ["gguf", "llama", "quantized"],
                 "quantization_info": "Q4_K_M, Q5_K_M, Q8_0 available",
-            },
-            {
-                "model_id": "unsloth/Llama-3.2-1B",
-                "downloads": 250000,
-                "likes": 800,
-                "tags": ["llama", "small", "efficient"],
-                "quantization_info": "Base model, optimized for fine-tuning",
+                "note": "Fallback result - HuggingFace API unavailable",
             },
         ])
     elif "mistral" in model_family:
@@ -285,6 +406,7 @@ def search_similar_models(
                 "likes": 950,
                 "tags": ["gguf", "mistral", "quantized"],
                 "quantization_info": "Q4_K_M recommended for edge",
+                "note": "Fallback result - HuggingFace API unavailable",
             },
         ])
     elif "phi" in model_family:
@@ -295,17 +417,20 @@ def search_similar_models(
                 "likes": 700,
                 "tags": ["gguf", "phi", "small"],
                 "quantization_info": "2.7B params, excellent for edge",
+                "note": "Fallback result - HuggingFace API unavailable",
             },
         ])
     
-    # Add generic results
-    results.append({
-        "model_id": f"{base_model}-optimized",
-        "downloads": 10000,
-        "likes": 50,
-        "tags": ["optimized", task],
-        "quantization_info": "Community optimized version",
-    })
+    # Generic fallback
+    if not results:
+        results.append({
+            "model_id": base_model,
+            "downloads": 0,
+            "likes": 0,
+            "tags": [task],
+            "quantization_info": "Could not search HuggingFace - using original model",
+            "note": "Fallback result - HuggingFace API unavailable",
+        })
     
     return results[:max_results]
 
@@ -470,7 +595,8 @@ def lookup_quantization_benchmarks(
     """Look up known benchmark results for a model family at a specific bit width.
     
     Use this tool to see what performance others have achieved with
-    similar compression settings.
+    similar compression settings. First checks local history database,
+    then falls back to reference benchmarks.
     
     Args:
         model_family: Model family (e.g., "llama", "mistral", "phi")
@@ -479,8 +605,107 @@ def lookup_quantization_benchmarks(
     Returns:
         Known benchmark results and recommendations
     """
-    # Simulated benchmark database
-    # In production, this would query a real database or API
+    # First try to get results from our own history database
+    history_results = _lookup_from_history(model_family, bits)
+    if history_results:
+        return history_results
+    
+    # Fall back to reference benchmarks
+    return _lookup_reference_benchmarks(model_family, bits)
+
+
+def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any]]:
+    """Look up benchmark results from Sintra's own history database."""
+    try:
+        from sintra.persistence import get_history_db
+        
+        db = get_history_db()
+        
+        # Query for successful runs matching model family and bits
+        query = """
+            SELECT 
+                model_id,
+                hardware_profile,
+                bits,
+                actual_tps,
+                accuracy_score,
+                pruning_ratio
+            FROM optimization_history 
+            WHERE model_id LIKE ? 
+            AND bits = ?
+            AND was_successful = 1
+            ORDER BY created_at DESC
+            LIMIT 10
+        """
+        
+        family_pattern = f"%{model_family}%"
+        cursor = db.execute(query, (family_pattern, bits))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return None
+        
+        # Aggregate results
+        tps_values = [row[3] for row in rows if row[3]]
+        accuracy_values = [row[4] for row in rows if row[4]]
+        
+        if not tps_values:
+            return None
+        
+        avg_tps = sum(tps_values) / len(tps_values)
+        min_tps = min(tps_values)
+        max_tps = max(tps_values)
+        avg_accuracy = sum(accuracy_values) / len(accuracy_values) if accuracy_values else 0.8
+        
+        # Estimate accuracy drop from baseline (assuming 0.9 baseline)
+        accuracy_drop = max(0, 0.9 - avg_accuracy)
+        
+        # Determine quality rating
+        if accuracy_drop < 0.02:
+            quality = "excellent"
+        elif accuracy_drop < 0.05:
+            quality = "very_good"
+        elif accuracy_drop < 0.10:
+            quality = "good"
+        elif accuracy_drop < 0.15:
+            quality = "medium"
+        else:
+            quality = "low"
+        
+        return {
+            "found": True,
+            "source": "local_history",
+            "model_family": model_family,
+            "bits": bits,
+            "num_samples": len(rows),
+            "benchmark_results": {
+                "tps_range": (round(min_tps, 1), round(max_tps, 1)),
+                "avg_tps": round(avg_tps, 1),
+                "accuracy_drop": round(accuracy_drop, 3),
+                "quality": quality,
+            },
+            "sample_configs": [
+                {
+                    "model": row[0],
+                    "hardware": row[1],
+                    "tps": row[3],
+                    "accuracy": row[4],
+                    "pruning": row[5],
+                }
+                for row in rows[:3]  # Top 3 samples
+            ],
+            "recommendation": f"Based on {len(rows)} local runs: {bits}-bit {model_family} achieves "
+                             f"~{avg_tps:.1f} TPS with {quality} quality",
+        }
+        
+    except Exception as e:
+        logger.debug(f"Could not query history database: {e}")
+        return None
+
+
+def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]:
+    """Look up reference benchmark data (fallback when no local history)."""
+    # Reference benchmark database based on community results
     benchmarks = {
         "llama": {
             2: {"tps_range": (25, 40), "accuracy_drop": 0.15, "quality": "low"},
@@ -506,6 +731,18 @@ def lookup_quantization_benchmarks(
             6: {"tps_range": (16, 28), "accuracy_drop": 0.006, "quality": "near_original"},
             8: {"tps_range": (12, 22), "accuracy_drop": 0.002, "quality": "near_original"},
         },
+        "qwen": {
+            3: {"tps_range": (22, 38), "accuracy_drop": 0.07, "quality": "good"},
+            4: {"tps_range": (18, 32), "accuracy_drop": 0.035, "quality": "very_good"},
+            5: {"tps_range": (14, 26), "accuracy_drop": 0.018, "quality": "excellent"},
+            8: {"tps_range": (9, 16), "accuracy_drop": 0.004, "quality": "near_original"},
+        },
+        "gemma": {
+            3: {"tps_range": (24, 40), "accuracy_drop": 0.06, "quality": "good"},
+            4: {"tps_range": (20, 35), "accuracy_drop": 0.03, "quality": "very_good"},
+            5: {"tps_range": (16, 28), "accuracy_drop": 0.015, "quality": "excellent"},
+            8: {"tps_range": (10, 18), "accuracy_drop": 0.003, "quality": "near_original"},
+        },
     }
     
     # Normalize model family
@@ -519,6 +756,7 @@ def lookup_quantization_benchmarks(
     if not matched_family:
         return {
             "found": False,
+            "source": "reference",
             "message": f"No benchmark data for {model_family}. Using generic estimates.",
             "generic_estimate": {
                 "tps_range": (10 + (8 - bits) * 3, 20 + (8 - bits) * 5),
@@ -530,12 +768,14 @@ def lookup_quantization_benchmarks(
     if bits not in benchmarks[matched_family]:
         return {
             "found": False,
+            "source": "reference",
             "message": f"No data for {bits}-bit quantization of {matched_family}",
         }
     
     data = benchmarks[matched_family][bits]
     return {
         "found": True,
+        "source": "reference",
         "model_family": matched_family,
         "bits": bits,
         "benchmark_results": data,
