@@ -162,6 +162,10 @@ def main():
     if args.hf_token:
         os.environ["HF_TOKEN"] = args.hf_token
     
+    # Check backend dependencies
+    if args.backend == "gguf" and not args.mock and not args.debug:
+        _check_gguf_dependencies()
+    
     backend_names = {"gguf": "GGUF/llama.cpp", "bnb": "bitsandbytes", "onnx": "ONNX/Optimum"}
     log_transition(
         "System", 
@@ -477,6 +481,30 @@ def _load_resume_checkpoint(resume_arg: str, model_id: str = None) -> dict | Non
         return find_latest_checkpoint(model_id=model_id)
     else:
         return load_checkpoint(resume_arg)
+
+
+def _check_gguf_dependencies():
+    """Check if llama.cpp is available for GGUF backend."""
+    from sintra.compression.quantizer import check_llama_cpp_available, LLAMA_CPP_INSTALL_INSTRUCTIONS
+    
+    available, message = check_llama_cpp_available()
+    
+    if not available:
+        console.print(f"[bold red]⚠️  GGUF Backend: {message}[/bold red]")
+        console.print(LLAMA_CPP_INSTALL_INSTRUCTIONS)
+        console.print("[yellow]Options:[/yellow]")
+        console.print("  1. Install llama.cpp (see instructions above)")
+        console.print("  2. Use --backend bnb (requires NVIDIA GPU)")
+        console.print("  3. Use --mock for testing without real compression")
+        console.print()
+        
+        # Ask user if they want to continue
+        try:
+            response = input("Continue anyway? [y/N]: ").strip().lower()
+            if response != 'y':
+                sys.exit(1)
+        except (EOFError, KeyboardInterrupt):
+            sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -2,19 +2,132 @@
 
 Provides quantization of GGUF models to various bit depths.
 Supports pre-quantization pruning and layer dropping.
+
+REQUIREMENTS:
+    llama.cpp must be installed for GGUF quantization.
+    
+    Installation:
+        git clone https://github.com/ggerganov/llama.cpp
+        cd llama.cpp
+        make -j
+        
+    Or with CMake:
+        git clone https://github.com/ggerganov/llama.cpp
+        cd llama.cpp
+        cmake -B build
+        cmake --build build --config Release -j
+        
+    The following files are needed:
+        - convert_hf_to_gguf.py (in llama.cpp root)
+        - llama-quantize (in llama.cpp/build/bin or after `make`)
 """
 
 import logging
+import os
 import shutil
 import subprocess
+import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Default cache directory
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "sintra"
+
+
+LLAMA_CPP_INSTALL_INSTRUCTIONS = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                      llama.cpp Installation Required                          ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ GGUF quantization requires llama.cpp. Install with:                          ║
+║                                                                              ║
+║   git clone https://github.com/ggerganov/llama.cpp ~/llama.cpp               ║
+║   cd ~/llama.cpp                                                             ║
+║   make -j                                                                    ║
+║                                                                              ║
+║ Or use CMake (recommended for GPU support):                                  ║
+║                                                                              ║
+║   cd ~/llama.cpp                                                             ║
+║   cmake -B build -DGGML_CUDA=ON    # Add -DGGML_CUDA=ON for NVIDIA GPU      ║
+║   cmake --build build --config Release -j                                    ║
+║                                                                              ║
+║ Alternative: Use --backend bnb (bitsandbytes) if you have a CUDA GPU.        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+
+def _get_convert_script_paths() -> list[Path]:
+    """Get all possible paths where convert_hf_to_gguf.py might be installed.
+    
+    Searches:
+    - Standard llama.cpp clone locations
+    - Python site-packages (from llama-cpp-python pip package)
+    - Current virtualenv
+    """
+    import sys
+    
+    paths = [
+        # Standard llama.cpp clone locations
+        Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
+        Path("/usr/local/share/llama.cpp/convert_hf_to_gguf.py"),
+    ]
+    
+    # Add site-packages locations (llama-cpp-python installs it there)
+    for site_dir in sys.path:
+        site_path = Path(site_dir)
+        if "site-packages" in str(site_path) or "dist-packages" in str(site_path):
+            # llama-cpp-python installs to site-packages/bin/
+            bin_script = site_path / "bin" / "convert_hf_to_gguf.py"
+            if bin_script.exists():
+                paths.insert(0, bin_script)  # Prefer pip-installed version
+            # Also check direct in site-packages
+            direct_script = site_path / "convert_hf_to_gguf.py"
+            if direct_script.exists():
+                paths.insert(0, direct_script)
+    
+    # Check LLAMA_CPP_PATH environment variable
+    llama_cpp_path = os.environ.get("LLAMA_CPP_PATH")
+    if llama_cpp_path:
+        env_script = Path(llama_cpp_path) / "convert_hf_to_gguf.py"
+        paths.insert(0, env_script)
+    
+    return paths
+
+
+def check_llama_cpp_available() -> Tuple[bool, str]:
+    """Check if llama.cpp is properly installed.
+    
+    Returns:
+        Tuple of (is_available, message)
+    """
+    # Check for llama-quantize
+    quantize_paths = [
+        shutil.which("llama-quantize"),
+        shutil.which("quantize"),
+        Path.home() / "llama.cpp" / "build" / "bin" / "llama-quantize",
+        Path.home() / "llama.cpp" / "llama-quantize",
+        Path("/usr/local/bin/llama-quantize"),
+    ]
+    
+    quantize_found = any(p and (Path(p).exists() if isinstance(p, str) else p.exists()) for p in quantize_paths if p)
+    
+    # Check for convert script - search multiple locations including pip/uv installs
+    convert_paths = _get_convert_script_paths()
+    
+    convert_found = any(p.exists() for p in convert_paths)
+    
+    if quantize_found and convert_found:
+        return True, "llama.cpp is installed and ready"
+    
+    missing = []
+    if not quantize_found:
+        missing.append("llama-quantize binary")
+    if not convert_found:
+        missing.append("convert_hf_to_gguf.py script")
+    
+    return False, f"Missing: {', '.join(missing)}"
 
 
 class QuantizationType(str, Enum):
@@ -55,7 +168,7 @@ class QuantizationError(Exception):
 
 
 class GGUFQuantizer:
-    """Quantizes GGUF models using llama.cpp's llama-quantize.
+    """Quantizes GGUF models using llama.cpp llama-quantize.
     
     Handles conversion from HuggingFace format to GGUF and quantization
     to various bit depths.
@@ -110,10 +223,7 @@ class GGUFQuantizer:
     
     def _find_convert_script(self) -> Optional[Path]:
         """Find convert_hf_to_gguf.py script."""
-        candidates = [
-            Path.home() / "llama.cpp" / "convert_hf_to_gguf.py",
-            Path("/usr/local/share/llama.cpp/convert_hf_to_gguf.py"),
-        ]
+        candidates = _get_convert_script_paths()
         
         for candidate in candidates:
             if candidate.exists():
@@ -150,8 +260,8 @@ class GGUFQuantizer:
         
         if not self._convert_script:
             raise QuantizationError(
-                "convert_hf_to_gguf.py not found. "
-                "Please install llama.cpp: git clone https://github.com/ggerganov/llama.cpp"
+                "convert_hf_to_gguf.py not found.\n\n"
+                f"{LLAMA_CPP_INSTALL_INSTRUCTIONS}"
             )
         
         logger.info(f"Converting {model_path} to GGUF...")
@@ -250,9 +360,7 @@ class GGUFQuantizer:
         """Run llama-quantize on a GGUF file."""
         if not self._llama_quantize:
             raise QuantizationError(
-                "llama-quantize not found. Install llama.cpp:\n"
-                "  git clone https://github.com/ggerganov/llama.cpp\n"
-                "  cd llama.cpp && make llama-quantize"
+                f"llama-quantize not found.\n\n{LLAMA_CPP_INSTALL_INSTRUCTIONS}"
             )
         
         logger.info(f"Quantizing to {quant_type.value}...")

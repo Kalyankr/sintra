@@ -16,8 +16,11 @@ from .downloader import ModelDownloader, download_model
 from .quantizer import (
     GGUFQuantizer,
     QuantizationType,
+    QuantizationError,
     quantize_model,
     quantize_with_compression,
+    check_llama_cpp_available,
+    LLAMA_CPP_INSTALL_INSTRUCTIONS,
 )
 from .pruner import (
     LayerDropper,
