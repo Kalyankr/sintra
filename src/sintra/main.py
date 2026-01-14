@@ -20,7 +20,7 @@ from sintra.agents.nodes import (
 )
 from sintra.agents.state import SintraState
 from sintra.cli import parse_args
-from sintra.profiles.hardware import auto_detect_hardware, print_hardware_info
+from sintra.profiles.hardware import auto_detect_hardware, print_hardware_info, save_profile_to_yaml
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
 from sintra.ui.console import console, log_transition
@@ -66,13 +66,26 @@ def main():
     # Setup progress reporter
     set_global_reporter(ConsoleProgressReporter(show_details=args.debug))
 
+    # Setup output directory first (needed for saving detected profile)
+    output_dir = Path(args.output_dir) if args.output_dir else Path("./outputs")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["SINTRA_OUTPUT_DIR"] = str(output_dir.absolute())
+
     # Load Hardware Context - either from YAML or auto-detect
     if args.auto_detect:
-        print_hardware_info()
+        # Auto-detect hardware and calculate smart targets
+        # Pass None to let the system calculate targets, or use CLI overrides if provided
+        target_tps = args.target_tps if args.target_tps != 30.0 else None
+        target_accuracy = args.target_accuracy if args.target_accuracy != 0.65 else None
+        
         profile = auto_detect_hardware(
-            target_tps=args.target_tps,
-            target_accuracy=args.target_accuracy,
+            target_tps=target_tps,
+            target_accuracy=target_accuracy,
         )
+        
+        # Save the detected profile for review/editing
+        profile_path = output_dir / "detected_profile.yaml"
+        print_hardware_info(save_path=profile_path)
         log_transition("System", "Using auto-detected hardware profile", "hw.profile")
     else:
         try:
@@ -80,11 +93,6 @@ def main():
         except ProfileLoadError as e:
             console.print(f"[status.fail] Failed to load hardware profile: {e}")
             sys.exit(1)
-
-    # Setup output directory
-    output_dir = Path(args.output_dir) if args.output_dir else Path("./outputs")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["SINTRA_OUTPUT_DIR"] = str(output_dir.absolute())
 
     # Handle dry-run mode
     if args.dry_run:

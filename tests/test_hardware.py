@@ -1,6 +1,7 @@
 """Tests for hardware auto-detection module."""
 
 import platform
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,10 @@ from sintra.profiles.hardware import (
     detect_cuda,
     detect_supported_quantizations,
     detect_system_name,
+    estimate_target_accuracy,
+    estimate_target_tps,
     get_gpu_vram_gb,
+    save_profile_to_yaml,
 )
 
 
@@ -167,3 +171,79 @@ class TestGetGpuVramGb:
             )
             result = get_gpu_vram_gb()
             assert result == 16.0
+
+
+class TestEstimateTargetTps:
+    """Tests for TPS target estimation."""
+
+    def test_cuda_high_vram(self):
+        """High VRAM CUDA should target 100 TPS."""
+        assert estimate_target_tps(24.0, has_cuda=True, cpu_arch="x86_64") == 100.0
+
+    def test_cuda_mid_vram(self):
+        """Mid VRAM CUDA should target 50 TPS."""
+        assert estimate_target_tps(12.0, has_cuda=True, cpu_arch="x86_64") == 50.0
+
+    def test_arm64_high_ram(self):
+        """High RAM ARM64 (Apple Silicon) should target 80 TPS."""
+        assert estimate_target_tps(32.0, has_cuda=False, cpu_arch="arm64") == 80.0
+
+    def test_arm64_mid_ram(self):
+        """Mid RAM ARM64 should target 60 TPS."""
+        assert estimate_target_tps(16.0, has_cuda=False, cpu_arch="arm64") == 60.0
+
+    def test_arm64_low_ram(self):
+        """Low RAM ARM64 (Raspberry Pi) should target 15 TPS."""
+        assert estimate_target_tps(4.0, has_cuda=False, cpu_arch="arm64") == 15.0
+
+    def test_x86_cpu_only(self):
+        """x86 CPU-only should have conservative targets."""
+        assert estimate_target_tps(16.0, has_cuda=False, cpu_arch="x86_64") == 15.0
+        assert estimate_target_tps(8.0, has_cuda=False, cpu_arch="x86_64") == 10.0
+
+
+class TestEstimateTargetAccuracy:
+    """Tests for accuracy target estimation."""
+
+    def test_high_vram_higher_accuracy(self):
+        """High VRAM should allow higher accuracy targets."""
+        assert estimate_target_accuracy(32.0) == 0.75
+
+    def test_mid_vram_mid_accuracy(self):
+        """Mid VRAM should have moderate accuracy targets."""
+        assert estimate_target_accuracy(16.0) == 0.70
+
+    def test_low_vram_lower_accuracy(self):
+        """Low VRAM should have lower accuracy targets."""
+        assert estimate_target_accuracy(3.0) == 0.55
+
+
+class TestSaveProfileToYaml:
+    """Tests for YAML profile saving."""
+
+    def test_saves_valid_yaml(self, tmp_path: Path):
+        """Should save a valid YAML file."""
+        profile = auto_detect_hardware()
+        yaml_path = tmp_path / "test_profile.yaml"
+        
+        result = save_profile_to_yaml(profile, yaml_path)
+        
+        assert result == yaml_path
+        assert yaml_path.exists()
+        
+        # Verify it can be read back
+        content = yaml_path.read_text()
+        assert "name:" in content
+        assert "constraints:" in content
+        assert "targets:" in content
+
+    def test_includes_header_comments(self, tmp_path: Path):
+        """Should include helpful header comments."""
+        profile = auto_detect_hardware()
+        yaml_path = tmp_path / "test_profile.yaml"
+        
+        save_profile_to_yaml(profile, yaml_path)
+        content = yaml_path.read_text()
+        
+        assert "# Auto-detected hardware profile" in content
+        assert "sintra --auto-detect" in content
