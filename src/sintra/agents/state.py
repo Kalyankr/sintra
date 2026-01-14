@@ -53,3 +53,6 @@ class SintraState(TypedDict):
     # Self-reflection
     reflection: Optional[Any]  # Reflection analysis from reflector node
     strategy_adjustments: Optional[List[Any]]  # Recommended strategy changes
+    
+    # Planner
+    optimization_plan: Optional[Any]  # OptimizationPlan from planner node

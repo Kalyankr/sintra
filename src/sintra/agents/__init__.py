@@ -16,6 +16,12 @@ from sintra.agents.nodes import (
     critic_router_llm,
     reporter_node,
 )
+from sintra.agents.planner import (
+    OptimizationPlan,
+    OptimizationStep,
+    get_plan_guidance,
+    planner_node,
+)
 from sintra.agents.react_architect import react_architect_node
 from sintra.agents.reflector import (
     Reflection,
@@ -48,6 +54,7 @@ __all__ = [
     "critic_node",
     "critic_router",
     "critic_router_llm",
+    "planner_node",
     "reflector_node",
     "reflector_node_llm",
     "reporter_node",
@@ -58,6 +65,9 @@ __all__ = [
     "query_hardware_capabilities",
     "lookup_quantization_benchmarks",
     # Models
+    "OptimizationPlan",
+    "OptimizationStep",
+    "get_plan_guidance",
     "Reflection",
     "RoutingDecision",
 ]
