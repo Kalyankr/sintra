@@ -18,7 +18,10 @@ def parse_args() -> argparse.Namespace:
 
     # Required: What are we optimizing for?
     parser.add_argument(
-        "profile", type=str, help="Path to hardware YAML (e.g., profiles/pi5.yaml)"
+        "profile",
+        type=str,
+        nargs="?",  # Optional when using --auto-detect
+        help="Path to hardware YAML (e.g., profiles/pi5.yaml)",
     )
 
     # Target Model Configuration
@@ -41,6 +44,32 @@ def parse_args() -> argparse.Namespace:
         default="gguf",
         choices=["gguf", "bnb", "onnx"],
         help="Quantization backend: gguf (llama.cpp), bnb (bitsandbytes), onnx (optimum)",
+    )
+    group_target.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Directory to save optimized models (default: ./outputs)",
+    )
+
+    # Hardware Configuration
+    group_hw = parser.add_argument_group("Hardware Configuration")
+    group_hw.add_argument(
+        "--auto-detect",
+        action="store_true",
+        help="Auto-detect hardware specs instead of using a YAML profile",
+    )
+    group_hw.add_argument(
+        "--target-tps",
+        type=float,
+        default=30.0,
+        help="Target tokens per second (used with --auto-detect)",
+    )
+    group_hw.add_argument(
+        "--target-accuracy",
+        type=float,
+        default=0.65,
+        help="Minimum accuracy score (used with --auto-detect)",
     )
 
     # Brain Configuration
@@ -72,6 +101,11 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Maximum optimization attempts before halting",
     )
+    group_exec.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be done without executing compression",
+    )
 
     # Debug Mode
     group_debug = parser.add_argument_group("Debugging")
@@ -81,4 +115,10 @@ def parse_args() -> argparse.Namespace:
         help="Run a single-loop test without calling the LLM API",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Validation: either profile or --auto-detect is required
+    if not args.profile and not args.auto_detect:
+        parser.error("Either a profile path or --auto-detect is required")
+
+    return args

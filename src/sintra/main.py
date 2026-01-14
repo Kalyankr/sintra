@@ -1,5 +1,7 @@
+import json
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
@@ -18,9 +20,11 @@ from sintra.agents.nodes import (
 )
 from sintra.agents.state import SintraState
 from sintra.cli import parse_args
+from sintra.profiles.hardware import auto_detect_hardware, print_hardware_info
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
 from sintra.ui.console import console, log_transition
+from sintra.ui.progress import ConsoleProgressReporter, set_global_reporter
 
 
 def build_sintra_workflow():
@@ -58,13 +62,34 @@ def main():
 
     # Setup UI
     console.rule("[arch.node] SINTRA: Edge AI Distiller")
+    
+    # Setup progress reporter
+    set_global_reporter(ConsoleProgressReporter(show_details=args.debug))
 
-    # Load Hardware Context
-    try:
-        profile = load_hardware_profile(args.profile)
-    except ProfileLoadError as e:
-        console.print(f"[status.fail] Failed to load hardware profile: {e}")
-        sys.exit(1)
+    # Load Hardware Context - either from YAML or auto-detect
+    if args.auto_detect:
+        print_hardware_info()
+        profile = auto_detect_hardware(
+            target_tps=args.target_tps,
+            target_accuracy=args.target_accuracy,
+        )
+        log_transition("System", "Using auto-detected hardware profile", "hw.profile")
+    else:
+        try:
+            profile = load_hardware_profile(args.profile)
+        except ProfileLoadError as e:
+            console.print(f"[status.fail] Failed to load hardware profile: {e}")
+            sys.exit(1)
+
+    # Setup output directory
+    output_dir = Path(args.output_dir) if args.output_dir else Path("./outputs")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["SINTRA_OUTPUT_DIR"] = str(output_dir.absolute())
+
+    # Handle dry-run mode
+    if args.dry_run:
+        _run_dry_mode(args, profile, output_dir)
+        return
 
     # Set up environment for worker subprocess
     os.environ["SINTRA_REAL_COMPRESSION"] = "true"
@@ -153,6 +178,80 @@ def main():
             console.print("\n[dim]Full traceback:[/dim]")
             console.print(traceback.format_exc())
         sys.exit(1)
+
+
+def _run_dry_mode(args, profile, output_dir: Path) -> None:
+    """Execute dry-run mode: show what would happen without running compression."""
+    from sintra.profiles.models import HardwareProfile
+    
+    console.print("\n[bold yellow]🔍 DRY RUN MODE[/bold yellow]")
+    console.print("[dim]No actual compression will be performed.[/dim]\n")
+    
+    # Show configuration
+    console.print("[bold cyan]Configuration Summary[/bold cyan]")
+    console.print(f"  Model: {args.model_id}")
+    console.print(f"  Backend: {args.backend}")
+    console.print(f"  Output Directory: {output_dir.absolute()}")
+    console.print(f"  Max Iterations: {args.max_iters}")
+    console.print(f"  Mock Mode: {args.mock}")
+    console.print()
+    
+    # Show hardware profile
+    console.print("[bold cyan]Hardware Profile[/bold cyan]")
+    console.print(f"  Name: {profile.name}")
+    console.print(f"  Available Memory: {profile.constraints.vram_gb} GB")
+    console.print(f"  CPU Architecture: {profile.constraints.cpu_arch}")
+    console.print(f"  CUDA Available: {profile.constraints.has_cuda}")
+    if profile.supported_quantizations:
+        console.print(f"  Supported Quantizations: {', '.join(profile.supported_quantizations)}")
+    console.print()
+    
+    # Show targets
+    console.print("[bold cyan]Optimization Targets[/bold cyan]")
+    console.print(f"  Min Tokens/Second: {profile.targets.min_tokens_per_second}")
+    console.print(f"  Min Accuracy: {profile.targets.min_accuracy_score}")
+    if profile.targets.max_latency_ms:
+        console.print(f"  Max Latency: {profile.targets.max_latency_ms} ms")
+    console.print()
+    
+    # Show what would happen
+    console.print("[bold cyan]Planned Actions[/bold cyan]")
+    console.print("  1. Initialize LangGraph workflow with architect, benchmarker, critic nodes")
+    console.print(f"  2. Download model from HuggingFace: {args.model_id}")
+    console.print(f"  3. Apply quantization using {args.backend} backend")
+    console.print("  4. Benchmark compressed model for TPS and accuracy")
+    console.print("  5. Iterate until targets met or max iterations reached")
+    console.print(f"  6. Save optimized model to: {output_dir.absolute()}")
+    console.print()
+    
+    # Save dry-run config to JSON
+    dry_run_config = {
+        "mode": "dry-run",
+        "model_id": args.model_id,
+        "backend": args.backend,
+        "output_dir": str(output_dir.absolute()),
+        "max_iters": args.max_iters,
+        "profile": {
+            "name": profile.name,
+            "constraints": {
+                "vram_gb": profile.constraints.vram_gb,
+                "cpu_arch": profile.constraints.cpu_arch,
+                "has_cuda": profile.constraints.has_cuda,
+            },
+            "targets": {
+                "min_tokens_per_second": profile.targets.min_tokens_per_second,
+                "min_accuracy_score": profile.targets.min_accuracy_score,
+                "max_latency_ms": profile.targets.max_latency_ms,
+            },
+        },
+    }
+    
+    config_path = output_dir / "dry_run_config.json"
+    with open(config_path, "w") as f:
+        json.dump(dry_run_config, f, indent=2)
+    
+    console.print(f"[green]✓ Dry-run config saved to: {config_path}[/green]")
+    console.print("\n[dim]To run actual optimization, remove the --dry-run flag.[/dim]")
 
 
 if __name__ == "__main__":
