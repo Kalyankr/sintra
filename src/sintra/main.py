@@ -236,23 +236,32 @@ def main():
         initial_state["use_react"] = getattr(args, 'react', False)
         initial_state["run_id"] = run_id
 
-    # Handle --agentic flag (enables all agentic features)
-    use_planner = getattr(args, 'plan', False) or getattr(args, 'agentic', False)
-    use_react = getattr(args, 'react', False) or getattr(args, 'agentic', False)
-    use_reflect = getattr(args, 'reflect', False) or getattr(args, 'agentic', False)
-    use_llm_routing = getattr(args, 'llm_routing', False) or getattr(args, 'agentic', False)
+    # Agentic features are ON by default, use --simple or --no-* to disable
+    use_simple = getattr(args, 'simple', False)
+    use_planner = not use_simple and not getattr(args, 'no_plan', False)
+    use_react = not use_simple and not getattr(args, 'no_react', False)
+    use_reflect = not use_simple and not getattr(args, 'no_reflect', False)
+    use_llm_routing = not use_simple and not getattr(args, 'no_llm_routing', False)
 
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
     )
-    if use_planner:
-        log_transition("System", "Planner agent enabled for strategy creation", "arch.node")
-    if use_react:
-        log_transition("System", "Using ReAct-style architect with tool use", "arch.node")
-    if use_reflect:
-        log_transition("System", "Self-reflection enabled for failure analysis", "critic.node")
-    if use_llm_routing:
-        log_transition("System", "Using LLM-based routing decisions", "critic.node")
+    
+    # Show mode
+    if use_simple:
+        log_transition("System", "Running in simple mode (agentic features disabled)", "hw.profile")
+    else:
+        active_features = []
+        if use_planner:
+            active_features.append("planner")
+        if use_react:
+            active_features.append("ReAct")
+        if use_reflect:
+            active_features.append("reflection")
+        if use_llm_routing:
+            active_features.append("LLM-routing")
+        if active_features:
+            log_transition("System", f"Agentic mode: {', '.join(active_features)}", "arch.node")
     if not args.debug:
         log_transition("System", f"Optimizing: {args.model_id}", "hw.profile")
 

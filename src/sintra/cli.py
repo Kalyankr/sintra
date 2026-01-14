@@ -121,32 +121,32 @@ def parse_args() -> argparse.Namespace:
         help="List all available checkpoints and exit",
     )
 
-    # Agentic Features
-    group_agentic = parser.add_argument_group("Agentic Features")
+    # Agentic Features (enabled by default)
+    group_agentic = parser.add_argument_group("Agentic Features (enabled by default)")
     group_agentic.add_argument(
-        "--plan",
+        "--simple",
         action="store_true",
-        help="Enable planner agent to create optimization strategy",
+        help="Disable all agentic features (use basic architect without tools)",
     )
     group_agentic.add_argument(
-        "--react",
+        "--no-plan",
         action="store_true",
-        help="Use ReAct-style architect with tool use (more agentic)",
+        help="Disable planner agent",
     )
     group_agentic.add_argument(
-        "--reflect",
+        "--no-react",
         action="store_true",
-        help="Enable self-reflection node for failure analysis",
+        help="Disable ReAct-style architect (use basic prompt)",
     )
     group_agentic.add_argument(
-        "--llm-routing",
+        "--no-reflect",
         action="store_true",
-        help="Use LLM for routing decisions instead of rules",
+        help="Disable self-reflection node",
     )
     group_agentic.add_argument(
-        "--agentic",
+        "--no-llm-routing",
         action="store_true",
-        help="Enable all agentic features (--plan --react --reflect --llm-routing)",
+        help="Use rule-based routing instead of LLM",
     )
 
     # Debug Mode
