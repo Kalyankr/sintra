@@ -18,6 +18,19 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 
+class ModelArchitecture(BaseModel):
+    """Actual model architecture information from HuggingFace."""
+    
+    model_id: str = Field(description="The HuggingFace model ID")
+    num_layers: int = Field(description="Number of transformer layers")
+    hidden_size: int = Field(description="Hidden dimension size")
+    num_attention_heads: int = Field(description="Number of attention heads")
+    vocab_size: int = Field(description="Vocabulary size")
+    num_parameters: float = Field(description="Total parameters in billions")
+    architecture_type: str = Field(description="Model architecture (e.g., LlamaForCausalLM)")
+    max_position_embeddings: int = Field(description="Maximum context length")
+
+
 class ModelSearchResult(BaseModel):
     """Result from searching HuggingFace for similar models."""
     
@@ -62,6 +75,156 @@ class HardwareCapability(BaseModel):
 # ============================================================================
 # Tools
 # ============================================================================
+
+
+@tool
+def get_model_architecture(model_id: str) -> Dict[str, Any]:
+    """Fetch the actual architecture of a model from HuggingFace.
+    
+    ALWAYS use this tool before proposing layer dropping or pruning
+    to know the exact number of layers, hidden size, and other details.
+    This prevents suggesting invalid configurations like dropping layer 33
+    when the model only has 32 layers.
+    
+    Args:
+        model_id: The HuggingFace model ID (e.g., "meta-llama/Meta-Llama-3-8B")
+        
+    Returns:
+        Model architecture details including layer count, hidden size, etc.
+    """
+    try:
+        from huggingface_hub import hf_hub_download, HfApi
+        import json
+        
+        api = HfApi()
+        
+        # Try to get config.json from the model
+        try:
+            config_path = hf_hub_download(
+                repo_id=model_id,
+                filename="config.json",
+                repo_type="model",
+            )
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not download config.json: {e}")
+            # Fall back to model info
+            model_info = api.model_info(model_id)
+            return _estimate_architecture_from_name(model_id, model_info)
+        
+        # Extract architecture details
+        num_layers = (
+            config.get("num_hidden_layers") or 
+            config.get("n_layer") or 
+            config.get("num_layers") or
+            32  # default
+        )
+        hidden_size = (
+            config.get("hidden_size") or 
+            config.get("n_embd") or
+            config.get("d_model") or
+            4096
+        )
+        num_heads = (
+            config.get("num_attention_heads") or
+            config.get("n_head") or
+            32
+        )
+        vocab_size = config.get("vocab_size", 32000)
+        max_pos = (
+            config.get("max_position_embeddings") or
+            config.get("n_positions") or
+            config.get("max_seq_len") or
+            4096
+        )
+        arch_type = config.get("architectures", ["Unknown"])[0] if config.get("architectures") else config.get("model_type", "Unknown")
+        
+        # Estimate parameters
+        num_params = _estimate_parameters(num_layers, hidden_size, vocab_size, num_heads)
+        
+        return {
+            "success": True,
+            "model_id": model_id,
+            "num_layers": num_layers,
+            "hidden_size": hidden_size,
+            "num_attention_heads": num_heads,
+            "vocab_size": vocab_size,
+            "num_parameters_billions": round(num_params / 1e9, 2),
+            "architecture_type": arch_type,
+            "max_position_embeddings": max_pos,
+            "safe_layers_to_drop": list(range(1, min(4, num_layers // 4))),  # Safe early layers
+            "layer_drop_limit": num_layers // 4,  # Max 25% layer drop recommended
+            "note": f"Model has {num_layers} layers. Do NOT drop more than {num_layers // 4} layers.",
+        }
+        
+    except ImportError:
+        logger.warning("huggingface_hub not installed, using estimates")
+        return _estimate_architecture_from_name(model_id, None)
+    except Exception as e:
+        logger.warning(f"Failed to fetch model architecture: {e}")
+        return _estimate_architecture_from_name(model_id, None)
+
+
+def _estimate_parameters(num_layers: int, hidden_size: int, vocab_size: int, num_heads: int) -> float:
+    """Estimate total parameters based on architecture."""
+    # Embedding parameters
+    embed_params = vocab_size * hidden_size * 2  # input + output embeddings
+    
+    # Per-layer parameters (attention + MLP)
+    head_dim = hidden_size // num_heads
+    attn_params = 4 * hidden_size * hidden_size  # Q, K, V, O projections
+    mlp_params = 3 * hidden_size * (4 * hidden_size)  # up, gate, down (for LLaMA-style)
+    layer_params = attn_params + mlp_params
+    
+    total = embed_params + (num_layers * layer_params)
+    return total
+
+
+def _estimate_architecture_from_name(model_id: str, model_info: Any) -> Dict[str, Any]:
+    """Estimate architecture based on model name patterns."""
+    name_lower = model_id.lower()
+    
+    # Common model configurations
+    configs = {
+        "70b": {"layers": 80, "hidden": 8192, "heads": 64, "params": 70},
+        "65b": {"layers": 80, "hidden": 8192, "heads": 64, "params": 65},
+        "34b": {"layers": 48, "hidden": 8192, "heads": 64, "params": 34},
+        "33b": {"layers": 60, "hidden": 6656, "heads": 52, "params": 33},
+        "13b": {"layers": 40, "hidden": 5120, "heads": 40, "params": 13},
+        "8b": {"layers": 32, "hidden": 4096, "heads": 32, "params": 8},
+        "7b": {"layers": 32, "hidden": 4096, "heads": 32, "params": 7},
+        "3b": {"layers": 26, "hidden": 3200, "heads": 32, "params": 3},
+        "2b": {"layers": 24, "hidden": 2560, "heads": 32, "params": 2},
+        "1b": {"layers": 16, "hidden": 2048, "heads": 16, "params": 1},
+    }
+    
+    # Find matching config
+    matched = None
+    for size_key, config in configs.items():
+        if size_key in name_lower:
+            matched = config
+            break
+    
+    if not matched:
+        matched = configs["7b"]  # Default to 7B
+    
+    return {
+        "success": False,
+        "estimated": True,
+        "model_id": model_id,
+        "num_layers": matched["layers"],
+        "hidden_size": matched["hidden"],
+        "num_attention_heads": matched["heads"],
+        "vocab_size": 32000,
+        "num_parameters_billions": matched["params"],
+        "architecture_type": "estimated",
+        "max_position_embeddings": 4096,
+        "safe_layers_to_drop": list(range(1, min(4, matched["layers"] // 4))),
+        "layer_drop_limit": matched["layers"] // 4,
+        "note": f"ESTIMATED: Could not fetch actual config. Model likely has ~{matched['layers']} layers.",
+        "warning": "Install huggingface_hub for accurate architecture info",
+    }
 
 
 @tool
@@ -389,6 +552,7 @@ def lookup_quantization_benchmarks(
 def get_architect_tools() -> List:
     """Get all tools available to the architect agent."""
     return [
+        get_model_architecture,  # ALWAYS call first to know layer count
         search_similar_models,
         estimate_compression_impact,
         query_hardware_capabilities,

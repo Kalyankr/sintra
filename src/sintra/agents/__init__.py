@@ -32,6 +32,7 @@ from sintra.agents.state import SintraState
 from sintra.agents.tools import (
     estimate_compression_impact,
     get_architect_tools,
+    get_model_architecture,
     lookup_quantization_benchmarks,
     query_hardware_capabilities,
     search_similar_models,
@@ -60,6 +61,7 @@ __all__ = [
     "reporter_node",
     # Tools
     "get_architect_tools",
+    "get_model_architecture",
     "search_similar_models",
     "estimate_compression_impact",
     "query_hardware_capabilities",

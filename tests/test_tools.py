@@ -199,9 +199,10 @@ class TestGetArchitectTools:
         """Should return all architect tools."""
         tools = get_architect_tools()
         
-        assert len(tools) == 4
+        assert len(tools) == 5
         tool_names = [t.name for t in tools]
         
+        assert "get_model_architecture" in tool_names
         assert "search_similar_models" in tool_names
         assert "estimate_compression_impact" in tool_names
         assert "query_hardware_capabilities" in tool_names
