@@ -6,6 +6,7 @@ from typing import Any, Dict, Literal
 
 from sintra.agents.factory import get_architect_llm
 from sintra.benchmarks.executor import MockExecutor, StandaloneExecutor
+from sintra.persistence import format_history_from_db, get_history_db
 from sintra.profiles.models import ModelRecipe
 from sintra.ui.console import log_transition
 
@@ -53,6 +54,13 @@ def architect_node(state: SintraState) -> StateUpdate:
     brain = get_architect_llm(state["llm_config"])
     profile = state["profile"]
     history_summary = format_history_for_llm(state["history"])
+    
+    # Get historical context from database (across all runs)
+    db_history = format_history_from_db(
+        state["target_model_id"],
+        profile.name,
+        limit=10,
+    )
 
     history = state.get("history", [])
 
@@ -150,10 +158,15 @@ def architect_node(state: SintraState) -> StateUpdate:
     4. Combine techniques for fine-grained control
 
     ====================================================
-    PAST ATTEMPTS (NEVER REPEAT THESE)
+    PAST ATTEMPTS THIS RUN (NEVER REPEAT THESE)
     ====================================================
     {past_attempts}
     {untried_hint}
+
+    ====================================================
+    HISTORICAL INSIGHTS (FROM PREVIOUS RUNS)
+    ====================================================
+    {db_history}
 
     CRITICAL: You MUST propose a DIFFERENT recipe than all past attempts.
     - Change AT LEAST ONE of: bits, pruning_ratio, or layers_to_drop
@@ -303,6 +316,31 @@ def benchmarker_node(state: SintraState) -> StateUpdate:
     else:
         executor = StandaloneExecutor()
     result = executor.run_benchmark(recipe, profile)
+
+    # Save experiment to database for cross-run learning
+    run_id = state.get("run_id")
+    if run_id:
+        try:
+            db = get_history_db()
+            db.save_experiment(
+                run_id=run_id,
+                model_id=state["target_model_id"],
+                hardware_profile=profile.name,
+                recipe=recipe.model_dump(),
+                metrics={
+                    "actual_tps": result.actual_tps,
+                    "accuracy_score": result.accuracy_score,
+                    "peak_vram_gb": result.peak_vram_gb,
+                    "was_successful": result.was_successful,
+                },
+                backend=state.get("backend", "GGUF"),
+            )
+        except Exception as e:
+            log_transition(
+                "Lab",
+                f"Warning: Failed to save experiment to database: {e}",
+                "status.warn",
+            )
 
     # Return as a list because state['history'] is Annotated with operator.add
     return {"history": [{"recipe": recipe, "metrics": result}]}

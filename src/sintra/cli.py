@@ -106,6 +106,20 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show what would be done without executing compression",
     )
+    group_exec.add_argument(
+        "--resume",
+        type=str,
+        nargs="?",
+        const="latest",
+        default=None,
+        metavar="RUN_ID",
+        help="Resume from checkpoint. Use 'latest' or specify a run_id",
+    )
+    group_exec.add_argument(
+        "--list-checkpoints",
+        action="store_true",
+        help="List all available checkpoints and exit",
+    )
 
     # Debug Mode
     group_debug = parser.add_argument_group("Debugging")

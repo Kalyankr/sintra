@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,7 +20,14 @@ from sintra.agents.nodes import (
     reporter_node,
 )
 from sintra.agents.state import SintraState
+from sintra.checkpoint import (
+    find_latest_checkpoint,
+    list_checkpoints,
+    load_checkpoint,
+    save_checkpoint,
+)
 from sintra.cli import parse_args
+from sintra.persistence import get_history_db
 from sintra.profiles.hardware import auto_detect_hardware, print_hardware_info, save_profile_to_yaml
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
@@ -62,6 +70,11 @@ def main():
 
     # Setup UI
     console.rule("[arch.node] SINTRA: Edge AI Distiller")
+    
+    # Handle --list-checkpoints
+    if args.list_checkpoints:
+        _list_checkpoints()
+        return
     
     # Setup progress reporter
     set_global_reporter(ConsoleProgressReporter(show_details=args.debug))
@@ -113,23 +126,72 @@ def main():
         "hw.profile"
     )
 
-    # Initialize State
-    initial_state: SintraState = {
-        "profile": profile,
-        "llm_config": LLMConfig(
-            provider=LLMProvider(args.provider),
-            model_name=args.model,
-        ),
-        "use_debug": args.debug,
-        "use_mock": args.mock,
-        "target_model_id": args.model_id,
-        "iteration": 0,
-        "history": [],
-        "is_converged": False,
-        "current_recipe": None,
-        "critic_feedback": "",
-        "best_recipe": None,
-    }
+    # Handle resume mode
+    initial_state = None
+    run_id = None
+    
+    if args.resume:
+        checkpoint_data = _load_resume_checkpoint(args.resume, args.model_id)
+        if checkpoint_data:
+            initial_state = checkpoint_data["state"]
+            run_id = checkpoint_data["run_id"]
+            iteration = checkpoint_data["iteration"]
+            log_transition(
+                "System",
+                f"Resuming run {run_id[:8]}... from iteration {iteration}",
+                "status.success",
+            )
+            # Override profile from checkpoint
+            profile = initial_state["profile"]
+        else:
+            console.print("[yellow]No checkpoint found, starting fresh run[/yellow]")
+    
+    # Generate unique run ID if not resuming
+    if run_id is None:
+        run_id = str(uuid.uuid4())
+    
+    db = get_history_db()
+    
+    # Only start a new run if not resuming
+    if initial_state is None:
+        db.start_run(
+            run_id=run_id,
+            model_id=args.model_id,
+            hardware_profile=profile.name,
+            config={
+                "backend": args.backend,
+                "provider": args.provider,
+                "llm_model": args.model,
+                "max_iters": args.max_iters,
+                "target_tps": profile.targets.min_tokens_per_second,
+                "target_accuracy": profile.targets.min_accuracy_score,
+            },
+        )
+
+        # Initialize State (fresh run)
+        initial_state: SintraState = {
+            "profile": profile,
+            "llm_config": LLMConfig(
+                provider=LLMProvider(args.provider),
+                model_name=args.model,
+            ),
+            "use_debug": args.debug,
+            "use_mock": args.mock,
+            "target_model_id": args.model_id,
+            "run_id": run_id,
+            "backend": args.backend,
+            "iteration": 0,
+            "history": [],
+            "is_converged": False,
+            "current_recipe": None,
+            "critic_feedback": "",
+            "best_recipe": None,
+        }
+    else:
+        # Update resumed state with current session settings
+        initial_state["use_debug"] = args.debug
+        initial_state["use_mock"] = args.mock
+        initial_state["run_id"] = run_id
 
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
@@ -141,11 +203,49 @@ def main():
     app = build_sintra_workflow()
 
     # Streaming the graph for real-time console updates
+    final_state = None
+    current_iteration = initial_state.get("iteration", 0)
+    
     try:
-        for _ in app.stream(initial_state, config={"recursion_limit": 50}):
-            pass
+        for state in app.stream(initial_state, config={"recursion_limit": 50}):
+            final_state = state
+            
+            # Save checkpoint after each iteration (when we have benchmarker output)
+            for node_name, node_output in state.items():
+                if node_name == "benchmarker" and isinstance(node_output, dict):
+                    # Merge node output with current state for checkpoint
+                    checkpoint_state = {**initial_state}
+                    if "history" in node_output:
+                        checkpoint_state["history"] = (
+                            checkpoint_state.get("history", []) + node_output["history"]
+                        )
+                    current_iteration += 1
+                    checkpoint_state["iteration"] = current_iteration
+                    
+                    save_checkpoint(run_id, checkpoint_state, current_iteration)
+                    log_transition(
+                        "System",
+                        f"Checkpoint saved (iteration {current_iteration})",
+                        "status.dim",
+                    )
+        
+        # Mark run as complete in database
+        best_recipe = None
+        if final_state:
+            # Get the best recipe from the final state
+            for node_output in final_state.values():
+                if isinstance(node_output, dict) and "best_recipe" in node_output:
+                    best_recipe = node_output.get("best_recipe")
+                    break
+        
+        db.finish_run(
+            run_id=run_id,
+            status="completed",
+            best_recipe=best_recipe["recipe"].model_dump() if best_recipe else None,
+        )
         console.rule("[status.success] OPTIMIZATION COMPLETE")
     except MissingAPIKeyError as e:
+        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
         console.print(f"\n[bold red]✗ Missing API Key[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Setup:[/dim]")
@@ -156,6 +256,7 @@ def main():
         console.print("  3. Or export it: [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
         sys.exit(1)
     except LLMConnectionError as e:
+        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
         console.print(f"\n[bold red]✗ LLM Connection Failed[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Suggestions:[/dim]")
@@ -169,9 +270,11 @@ def main():
         )
         sys.exit(1)
     except KeyboardInterrupt:
+        db.finish_run(run_id=run_id, status="cancelled", best_recipe=None)
         console.print("\n[yellow]Optimization cancelled by user[/yellow]")
         sys.exit(130)
     except Exception as e:
+        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
         # Catch-all for unexpected errors
         console.print(f"\n[bold red]✗ Unexpected Error[/bold red]")
         console.print(f"  {type(e).__name__}: {e}")
@@ -260,6 +363,47 @@ def _run_dry_mode(args, profile, output_dir: Path) -> None:
     
     console.print(f"[green]✓ Dry-run config saved to: {config_path}[/green]")
     console.print("\n[dim]To run actual optimization, remove the --dry-run flag.[/dim]")
+
+
+def _list_checkpoints() -> None:
+    """Display all available checkpoints."""
+    checkpoints = list_checkpoints()
+    
+    if not checkpoints:
+        console.print("[yellow]No checkpoints found.[/yellow]")
+        console.print("[dim]Checkpoints are saved automatically during optimization runs.[/dim]")
+        return
+    
+    console.print(f"\n[bold cyan]Available Checkpoints ({len(checkpoints)} total)[/bold cyan]\n")
+    
+    for cp in checkpoints[:20]:  # Show at most 20
+        console.print(f"  [bold]{cp['run_id'][:8]}...[/bold]")
+        console.print(f"    Model: {cp['model_id']}")
+        console.print(f"    Iteration: {cp['iteration']}")
+        console.print(f"    Time: {cp['timestamp']}")
+        console.print()
+    
+    if len(checkpoints) > 20:
+        console.print(f"  [dim]... and {len(checkpoints) - 20} more[/dim]")
+    
+    console.print("[dim]Resume with: sintra --resume <run_id> --auto-detect[/dim]")
+    console.print("[dim]Or resume latest: sintra --resume --auto-detect[/dim]")
+
+
+def _load_resume_checkpoint(resume_arg: str, model_id: str = None) -> dict | None:
+    """Load checkpoint for resume.
+    
+    Args:
+        resume_arg: Either 'latest' or a specific run_id
+        model_id: Filter by model ID when finding latest
+        
+    Returns:
+        Checkpoint data or None
+    """
+    if resume_arg == "latest":
+        return find_latest_checkpoint(model_id=model_id)
+    else:
+        return load_checkpoint(resume_arg)
 
 
 if __name__ == "__main__":

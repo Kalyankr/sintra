@@ -108,3 +108,36 @@ class TestCliArgs:
             assert args.profile == "profiles/test.yaml"
             assert args.dry_run is True
             assert args.output_dir == "/tmp/out"
+
+    def test_resume_flag_latest(self):
+        """Should parse --resume with no argument as 'latest'."""
+        from sintra.cli import parse_args
+        
+        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--resume"]):
+            args = parse_args()
+            assert args.resume == "latest"
+
+    def test_resume_flag_with_run_id(self):
+        """Should parse --resume with a specific run_id."""
+        from sintra.cli import parse_args
+        
+        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--resume", "abc-123"]):
+            args = parse_args()
+            assert args.resume == "abc-123"
+
+    def test_list_checkpoints_flag(self):
+        """Should parse --list-checkpoints flag."""
+        from sintra.cli import parse_args
+        
+        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--list-checkpoints"]):
+            args = parse_args()
+            assert args.list_checkpoints is True
+
+    def test_resume_default_none(self):
+        """Resume should default to None."""
+        from sintra.cli import parse_args
+        
+        with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
+            args = parse_args()
+            assert args.resume is None
+            assert args.list_checkpoints is False

@@ -18,6 +18,12 @@ class SintraState(TypedDict):
 
     # Target model configuration
     target_model_id: str
+    
+    # Backend configuration
+    backend: str
+
+    # Run identification (for persistence)
+    run_id: str
 
     # Current Work-in-Progress
     current_recipe: Optional[ModelRecipe]
