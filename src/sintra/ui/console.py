@@ -37,12 +37,12 @@ console = Console(theme=SINTRA_THEME)
 
 def log_transition(node_name: str, message: str, style_key: str) -> None:
     """Standardized logger for Agent transitions.
-    
+
     Args:
         node_name: Name of the agent node (e.g., 'Architect', 'Lab').
         message: The message to display.
         style_key: Theme style key for coloring.
-    
+
     Example:
         >>> log_transition("Architect", "Analyzing hardware...", "arch.node")
         [12:00:01] | ARCHITECT  | Analyzing hardware...

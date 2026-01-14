@@ -22,20 +22,22 @@ logger = logging.getLogger(__name__)
 
 class OptimizationStep(BaseModel):
     """A single step in the optimization plan."""
-    
+
     step_number: int = Field(description="Order of this step (1-indexed)")
     strategy: str = Field(
         description="Strategy type: 'explore', 'exploit', 'binary_search', 'known_good'"
     )
     description: str = Field(description="Human-readable description of what to try")
     target_bits: Optional[int] = Field(default=None, description="Suggested bit width")
-    target_pruning: Optional[float] = Field(default=None, description="Suggested pruning ratio")
+    target_pruning: Optional[float] = Field(
+        default=None, description="Suggested pruning ratio"
+    )
     rationale: str = Field(description="Why this step makes sense")
 
 
 class OptimizationPlan(BaseModel):
     """Complete optimization plan created by the planner."""
-    
+
     model_id: str = Field(description="Model being optimized")
     hardware_name: str = Field(description="Target hardware")
     overall_strategy: str = Field(
@@ -44,7 +46,9 @@ class OptimizationPlan(BaseModel):
     steps: List[OptimizationStep] = Field(
         default_factory=list, description="Ordered list of optimization steps"
     )
-    max_iterations: int = Field(default=10, description="Maximum iterations before stopping")
+    max_iterations: int = Field(
+        default=10, description="Maximum iterations before stopping"
+    )
     early_stop_threshold: float = Field(
         default=0.95, description="Stop if we achieve this fraction of targets"
     )
@@ -129,15 +133,15 @@ Create a plan with 3-5 steps that efficiently explores the search space.
 
 def planner_node(state: SintraState) -> Dict[str, Any]:
     """Create an optimization plan before starting the search.
-    
+
     This node:
     1. Analyzes hardware constraints and targets
     2. Checks historical data for insights
     3. Creates a strategic plan for the architect to follow
-    
+
     Args:
         state: Current workflow state
-        
+
     Returns:
         State update with optimization plan
     """
@@ -145,35 +149,35 @@ def planner_node(state: SintraState) -> Dict[str, Any]:
     if state.get("use_debug"):
         log_transition("Planner", "DEBUG MODE: Using default plan", "arch.node")
         return {"optimization_plan": _create_default_plan(state)}
-    
+
     log_transition("Planner", "Creating optimization strategy...", "arch.node")
-    
+
     profile = state["profile"]
     model_id = state["target_model_id"]
-    
+
     # Get historical data
     historical_data = format_history_from_db(
         model_id,
         profile.name,
         limit=5,
     )
-    
+
     # Estimate model size from ID (rough heuristic)
     estimated_size = _estimate_model_size(model_id)
-    
+
     # Try LLM-based planning first
     try:
         plan = _create_llm_plan(state, historical_data, estimated_size)
     except Exception as e:
         logger.warning(f"LLM planning failed: {e}, using rule-based plan")
         plan = _create_rule_based_plan(state, historical_data, estimated_size)
-    
+
     log_transition(
         "Planner",
         f"Strategy: {plan.overall_strategy} ({len(plan.steps)} steps)",
         "arch.node",
     )
-    
+
     return {"optimization_plan": plan}
 
 
@@ -184,7 +188,7 @@ def _create_llm_plan(
 ) -> OptimizationPlan:
     """Create a plan using LLM reasoning."""
     profile = state["profile"]
-    
+
     prompt = PLANNER_SYSTEM_PROMPT.format(
         hardware_name=profile.name,
         vram_gb=profile.constraints.vram_gb,
@@ -195,15 +199,20 @@ def _create_llm_plan(
         estimated_size=estimated_size,
         historical_data=historical_data or "No historical data available.",
     )
-    
+
     llm = get_critic_llm(state["llm_config"])
     structured_llm = llm.with_structured_output(OptimizationPlan)
-    
-    plan = structured_llm.invoke([
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": "Create an optimization plan for this hardware and model."},
-    ])
-    
+
+    plan = structured_llm.invoke(
+        [
+            {"role": "system", "content": prompt},
+            {
+                "role": "user",
+                "content": "Create an optimization plan for this hardware and model.",
+            },
+        ]
+    )
+
     return plan
 
 
@@ -215,13 +224,13 @@ def _create_rule_based_plan(
     """Create a plan using rule-based logic (fallback)."""
     profile = state["profile"]
     model_id = state["target_model_id"]
-    
+
     steps = []
-    
+
     # Determine overall strategy based on constraints
     vram_gb = profile.constraints.vram_gb
     target_tps = profile.targets.min_tokens_per_second
-    
+
     if vram_gb < 4:
         # Very constrained - be aggressive
         overall_strategy = "aggressive"
@@ -317,7 +326,7 @@ def _create_rule_based_plan(
                 rationale="Layer dropping can provide final speed boost",
             ),
         ]
-    
+
     return OptimizationPlan(
         model_id=model_id,
         hardware_name=profile.name,
@@ -356,7 +365,7 @@ def _create_default_plan(state: SintraState) -> OptimizationPlan:
 def _estimate_model_size(model_id: str) -> str:
     """Estimate model size from its ID (rough heuristic)."""
     model_lower = model_id.lower()
-    
+
     # Check for size indicators in name (order matters - check larger first)
     if any(x in model_lower for x in ["70b", "72b", "65b"]):
         return "70B"
@@ -379,13 +388,15 @@ def _estimate_model_size(model_id: str) -> str:
         return "Unknown"
 
 
-def get_plan_guidance(plan: OptimizationPlan, iteration: int) -> Optional[OptimizationStep]:
+def get_plan_guidance(
+    plan: OptimizationPlan, iteration: int
+) -> Optional[OptimizationStep]:
     """Get the appropriate step from the plan for the current iteration.
-    
+
     Args:
         plan: The optimization plan
         iteration: Current iteration number (1-indexed)
-        
+
     Returns:
         The step to follow, or None if past plan length
     """

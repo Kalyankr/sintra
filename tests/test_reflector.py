@@ -6,9 +6,9 @@ from sintra.agents.reflector import (
     FailureAnalysis,
     Reflection,
     StrategyAdjustment,
-    reflector_node,
     _all_targets_met,
     _analyze_history,
+    reflector_node,
 )
 from sintra.profiles.models import (
     Constraints,
@@ -59,7 +59,7 @@ def sample_state(sample_profile):
 
 class TestFailureAnalysis:
     """Tests for FailureAnalysis model."""
-    
+
     def test_create_failure_analysis(self):
         failure = FailureAnalysis(
             failure_type="speed",
@@ -72,7 +72,7 @@ class TestFailureAnalysis:
 
 class TestStrategyAdjustment:
     """Tests for StrategyAdjustment model."""
-    
+
     def test_create_strategy_adjustment(self):
         adjustment = StrategyAdjustment(
             parameter="bits",
@@ -86,18 +86,20 @@ class TestStrategyAdjustment:
 
 class TestReflection:
     """Tests for Reflection model."""
-    
+
     def test_create_empty_reflection(self):
         reflection = Reflection(iteration_analyzed=1)
         assert reflection.iteration_analyzed == 1
         assert reflection.failures == []
         assert reflection.patterns == []
-    
+
     def test_create_full_reflection(self):
         reflection = Reflection(
             iteration_analyzed=3,
             failures=[
-                FailureAnalysis(failure_type="speed", root_cause="too slow", severity="high")
+                FailureAnalysis(
+                    failure_type="speed", root_cause="too slow", severity="high"
+                )
             ],
             patterns=["consistent speed failures"],
             adjustments=[
@@ -118,7 +120,7 @@ class TestReflection:
 
 class TestAllTargetsMet:
     """Tests for _all_targets_met helper."""
-    
+
     def test_returns_false_for_unsuccessful(self, sample_profile):
         metrics = ExperimentResult(
             actual_tps=50.0,
@@ -127,7 +129,7 @@ class TestAllTargetsMet:
             was_successful=False,
         )
         assert not _all_targets_met(metrics, sample_profile)
-    
+
     def test_returns_true_when_all_met(self, sample_profile):
         metrics = ExperimentResult(
             actual_tps=35.0,  # > 30
@@ -136,7 +138,7 @@ class TestAllTargetsMet:
             was_successful=True,
         )
         assert _all_targets_met(metrics, sample_profile)
-    
+
     def test_returns_false_when_tps_low(self, sample_profile):
         metrics = ExperimentResult(
             actual_tps=25.0,  # < 30
@@ -145,7 +147,7 @@ class TestAllTargetsMet:
             was_successful=True,
         )
         assert not _all_targets_met(metrics, sample_profile)
-    
+
     def test_returns_false_when_accuracy_low(self, sample_profile):
         metrics = ExperimentResult(
             actual_tps=35.0,
@@ -158,7 +160,7 @@ class TestAllTargetsMet:
 
 class TestAnalyzeHistory:
     """Tests for _analyze_history function."""
-    
+
     def test_identifies_speed_failures(self, sample_profile, sample_state):
         history = [
             {
@@ -171,11 +173,11 @@ class TestAnalyzeHistory:
                 ),
             }
         ]
-        
+
         reflection = _analyze_history(history, sample_profile, sample_state)
-        
+
         assert any(f.failure_type == "speed" for f in reflection.failures)
-    
+
     def test_identifies_accuracy_failures(self, sample_profile, sample_state):
         history = [
             {
@@ -188,11 +190,11 @@ class TestAnalyzeHistory:
                 ),
             }
         ]
-        
+
         reflection = _analyze_history(history, sample_profile, sample_state)
-        
+
         assert any(f.failure_type == "accuracy" for f in reflection.failures)
-    
+
     def test_identifies_crash_failures(self, sample_profile, sample_state):
         history = [
             {
@@ -206,12 +208,14 @@ class TestAnalyzeHistory:
                 ),
             }
         ]
-        
+
         reflection = _analyze_history(history, sample_profile, sample_state)
-        
+
         assert any(f.failure_type == "crash" for f in reflection.failures)
-    
-    def test_generates_adjustments_for_speed_failures(self, sample_profile, sample_state):
+
+    def test_generates_adjustments_for_speed_failures(
+        self, sample_profile, sample_state
+    ):
         history = [
             {
                 "recipe": ModelRecipe(bits=4, pruning_ratio=0.1),
@@ -232,9 +236,9 @@ class TestAnalyzeHistory:
                 ),
             },
         ]
-        
+
         reflection = _analyze_history(history, sample_profile, sample_state)
-        
+
         # Should recommend decreasing bits
         bit_adjustment = next(
             (a for a in reflection.adjustments if a.parameter == "bits"),
@@ -242,7 +246,7 @@ class TestAnalyzeHistory:
         )
         assert bit_adjustment is not None
         assert bit_adjustment.direction == "decrease"
-    
+
     def test_identifies_oscillation_pattern(self, sample_profile, sample_state):
         history = [
             {
@@ -264,22 +268,22 @@ class TestAnalyzeHistory:
                 ),
             },
         ]
-        
+
         reflection = _analyze_history(history, sample_profile, sample_state)
-        
+
         assert any("oscillating" in p.lower() for p in reflection.patterns)
 
 
 class TestReflectorNode:
     """Tests for reflector_node function."""
-    
+
     def test_returns_none_for_empty_history(self, sample_state):
         sample_state["history"] = []
-        
+
         result = reflector_node(sample_state)
-        
+
         assert result["reflection"] is None
-    
+
     def test_returns_none_in_debug_mode(self, sample_state):
         sample_state["use_debug"] = True
         sample_state["history"] = [
@@ -293,11 +297,11 @@ class TestReflectorNode:
                 ),
             }
         ]
-        
+
         result = reflector_node(sample_state)
-        
+
         assert result["reflection"] is None
-    
+
     def test_returns_none_when_successful(self, sample_state):
         sample_state["history"] = [
             {
@@ -310,11 +314,11 @@ class TestReflectorNode:
                 ),
             }
         ]
-        
+
         result = reflector_node(sample_state)
-        
+
         assert result["reflection"] is None
-    
+
     def test_returns_reflection_when_failed(self, sample_state):
         sample_state["history"] = [
             {
@@ -327,8 +331,8 @@ class TestReflectorNode:
                 ),
             }
         ]
-        
+
         result = reflector_node(sample_state)
-        
+
         assert result["reflection"] is not None
         assert isinstance(result["reflection"], Reflection)

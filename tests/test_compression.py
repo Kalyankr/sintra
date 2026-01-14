@@ -1,23 +1,24 @@
 """Tests for the compression module."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from sintra.compression.downloader import (
-    ModelDownloader,
-    DownloadError,
     DEFAULT_CACHE_DIR,
-)
-from sintra.compression.quantizer import (
-    GGUFQuantizer,
-    QuantizationType,
-    QuantizationError,
-    BITS_TO_QUANT,
+    DownloadError,
+    ModelDownloader,
 )
 from sintra.compression.evaluator import (
     AccuracyEvaluator,
     EvaluationError,
+)
+from sintra.compression.quantizer import (
+    BITS_TO_QUANT,
+    GGUFQuantizer,
+    QuantizationError,
+    QuantizationType,
 )
 
 
@@ -47,7 +48,7 @@ class TestModelDownloader:
         model_dir = tmp_path / "model"
         model_dir.mkdir()
         (model_dir / "model.safetensors").touch()
-        
+
         downloader = ModelDownloader(cache_dir=tmp_path)
         assert not downloader._is_complete_download(model_dir)
 
@@ -56,7 +57,7 @@ class TestModelDownloader:
         model_dir = tmp_path / "model"
         model_dir.mkdir()
         (model_dir / "config.json").touch()
-        
+
         downloader = ModelDownloader(cache_dir=tmp_path)
         assert not downloader._is_complete_download(model_dir)
 
@@ -66,7 +67,7 @@ class TestModelDownloader:
         model_dir.mkdir()
         (model_dir / "config.json").touch()
         (model_dir / "model.safetensors").touch()
-        
+
         downloader = ModelDownloader(cache_dir=tmp_path)
         assert downloader._is_complete_download(model_dir)
 
@@ -102,7 +103,7 @@ class TestGGUFQuantizer:
     def test_unsupported_bits_raises_error(self, tmp_path: Path) -> None:
         """Test unsupported bit depth raises error."""
         quantizer = GGUFQuantizer(cache_dir=tmp_path)
-        
+
         with pytest.raises(QuantizationError, match="Unsupported bit depth"):
             quantizer.quantize(tmp_path / "model", bits=7)
 
@@ -118,12 +119,22 @@ class TestQuantizationType:
     def test_all_quant_types_defined(self) -> None:
         """Test all expected quantization types are defined."""
         expected = [
-            "Q2_K", "Q3_K_S", "Q3_K_M", "Q3_K_L",
-            "Q4_0", "Q4_K_S", "Q4_K_M",
-            "Q5_0", "Q5_K_S", "Q5_K_M",
-            "Q6_K", "Q8_0", "F16", "F32",
+            "Q2_K",
+            "Q3_K_S",
+            "Q3_K_M",
+            "Q3_K_L",
+            "Q4_0",
+            "Q4_K_S",
+            "Q4_K_M",
+            "Q5_0",
+            "Q5_K_S",
+            "Q5_K_M",
+            "Q6_K",
+            "Q8_0",
+            "F16",
+            "F32",
         ]
-        
+
         for quant in expected:
             assert hasattr(QuantizationType, quant)
 
@@ -163,11 +174,11 @@ class TestAccuracyEvaluator:
     def test_perplexity_to_accuracy_bounds(self) -> None:
         """Test accuracy is bounded between 0.1 and 0.99."""
         evaluator = AccuracyEvaluator()
-        
+
         # Very low perplexity
         acc_low = evaluator._perplexity_to_accuracy(1.0)
         assert 0.1 <= acc_low <= 0.99
-        
+
         # Very high perplexity
         acc_high = evaluator._perplexity_to_accuracy(1000.0)
         assert 0.1 <= acc_high <= 0.99
@@ -175,13 +186,13 @@ class TestAccuracyEvaluator:
     def test_evaluate_missing_model(self, tmp_path: Path) -> None:
         """Test evaluate raises error for missing model."""
         evaluator = AccuracyEvaluator()
-        
+
         with pytest.raises(EvaluationError, match="Model not found"):
             evaluator.evaluate(tmp_path / "nonexistent.gguf")
 
     def test_evaluate_quick_missing_model(self, tmp_path: Path) -> None:
         """Test evaluate_quick raises error for missing model."""
         evaluator = AccuracyEvaluator()
-        
+
         with pytest.raises(EvaluationError, match="Model not found"):
             evaluator.evaluate_quick(tmp_path / "nonexistent.gguf")

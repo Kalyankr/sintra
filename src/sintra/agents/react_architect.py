@@ -16,7 +16,11 @@ from pydantic import BaseModel, Field
 from sintra.agents.factory import get_tool_enabled_llm
 from sintra.agents.state import SintraState
 from sintra.agents.tools import get_architect_tools
-from sintra.agents.utils import format_history_for_llm, get_untried_variations, is_duplicate_recipe
+from sintra.agents.utils import (
+    format_history_for_llm,
+    get_untried_variations,
+    is_duplicate_recipe,
+)
 from sintra.profiles.models import ModelRecipe
 from sintra.ui.console import log_transition
 
@@ -28,19 +32,29 @@ MAX_TOOL_ITERATIONS = 5  # Maximum tool calls before forcing a recipe
 
 class ReActStep(BaseModel):
     """A single step in the ReAct reasoning chain."""
-    
+
     thought: str = Field(description="The agent's reasoning about what to do next")
-    action: str = Field(description="The action to take: 'tool_call' or 'propose_recipe'")
+    action: str = Field(
+        description="The action to take: 'tool_call' or 'propose_recipe'"
+    )
     tool_name: Optional[str] = Field(default=None, description="Name of tool to call")
-    tool_input: Optional[Dict[str, Any]] = Field(default=None, description="Input for tool")
-    observation: Optional[str] = Field(default=None, description="Result from tool call")
+    tool_input: Optional[Dict[str, Any]] = Field(
+        default=None, description="Input for tool"
+    )
+    observation: Optional[str] = Field(
+        default=None, description="Result from tool call"
+    )
 
 
 class ArchitectReasoning(BaseModel):
     """Complete reasoning chain from the architect."""
-    
-    steps: List[ReActStep] = Field(default_factory=list, description="ReAct reasoning steps")
-    final_recipe: Optional[ModelRecipe] = Field(default=None, description="Proposed recipe")
+
+    steps: List[ReActStep] = Field(
+        default_factory=list, description="ReAct reasoning steps"
+    )
+    final_recipe: Optional[ModelRecipe] = Field(
+        default=None, description="Proposed recipe"
+    )
     confidence: float = Field(default=0.5, description="Confidence in the recipe (0-1)")
     reasoning_summary: str = Field(default="", description="Summary of reasoning")
 
@@ -109,15 +123,15 @@ Do not make more than {max_tools} tool calls.
 
 def react_architect_node(state: SintraState) -> Dict[str, Any]:
     """ReAct-style architect node with tool use.
-    
+
     This architect:
     1. Analyzes the situation
     2. Uses tools to gather information
     3. Proposes an informed recipe
-    
+
     Args:
         state: Current workflow state
-        
+
     Returns:
         State update with new recipe and reasoning chain
     """
@@ -125,25 +139,25 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
     if state.get("use_debug"):
         log_transition("Architect", "DEBUG MODE: Bypassing LLM API", "arch.node")
         return _debug_recipe(state)
-    
+
     log_transition(
         "Architect",
         f"[ReAct] Analyzing iteration {state['iteration']}...",
         "arch.node",
     )
-    
+
     # Get tools and LLM
     tools = get_architect_tools()
     tool_map = {tool.name: tool for tool in tools}
     llm = get_tool_enabled_llm(state["llm_config"], tools)
-    
+
     # Build context
     profile = state["profile"]
     history = state.get("history", [])
-    
+
     past_attempts = _format_past_attempts(history)
     strategy_hints = _get_strategy_hints(history)
-    
+
     system_prompt = REACT_SYSTEM_PROMPT.format(
         hardware_name=profile.name,
         vram_gb=profile.constraints.vram_gb,
@@ -154,80 +168,94 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
         strategy_hints=strategy_hints,
         max_tools=MAX_TOOL_ITERATIONS,
     )
-    
+
     # ReAct loop
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content="Analyze the situation and propose an optimal compression recipe."),
+        HumanMessage(
+            content="Analyze the situation and propose an optimal compression recipe."
+        ),
     ]
-    
+
     reasoning_steps: List[ReActStep] = []
     tool_iterations = 0
     final_recipe = None
-    
+
     while tool_iterations < MAX_TOOL_ITERATIONS:
         try:
             response = llm.invoke(messages)
         except Exception as e:
             logger.warning(f"LLM call failed: {e}")
             return _fallback_recipe(state, str(e))
-        
+
         # Check if LLM wants to use tools
         if response.tool_calls:
             for tool_call in response.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
-                
+
                 log_transition(
                     "Architect",
                     f"[Tool] Calling {tool_name}...",
                     "arch.node",
                 )
-                
+
                 # Execute tool
                 if tool_name in tool_map:
                     try:
                         tool_result = tool_map[tool_name].invoke(tool_args)
-                        observation = json.dumps(tool_result, indent=2) if isinstance(tool_result, (dict, list)) else str(tool_result)
+                        observation = (
+                            json.dumps(tool_result, indent=2)
+                            if isinstance(tool_result, (dict, list))
+                            else str(tool_result)
+                        )
                     except Exception as e:
                         observation = f"Tool error: {str(e)}"
                 else:
                     observation = f"Unknown tool: {tool_name}"
-                
+
                 # Record step
-                reasoning_steps.append(ReActStep(
-                    thought=f"Need to call {tool_name}",
-                    action="tool_call",
-                    tool_name=tool_name,
-                    tool_input=tool_args,
-                    observation=observation,
-                ))
-                
+                reasoning_steps.append(
+                    ReActStep(
+                        thought=f"Need to call {tool_name}",
+                        action="tool_call",
+                        tool_name=tool_name,
+                        tool_input=tool_args,
+                        observation=observation,
+                    )
+                )
+
                 # Add tool result to messages
                 messages.append(response)
-                messages.append(ToolMessage(
-                    content=observation,
-                    tool_call_id=tool_call["id"],
-                ))
-                
+                messages.append(
+                    ToolMessage(
+                        content=observation,
+                        tool_call_id=tool_call["id"],
+                    )
+                )
+
                 tool_iterations += 1
         else:
             # No tool calls - try to extract recipe from response
             final_recipe = _extract_recipe_from_response(response, state)
             if final_recipe:
-                reasoning_steps.append(ReActStep(
-                    thought="Proposing final recipe based on research",
-                    action="propose_recipe",
-                ))
+                reasoning_steps.append(
+                    ReActStep(
+                        thought="Proposing final recipe based on research",
+                        action="propose_recipe",
+                    )
+                )
                 break
-            
+
             # Ask for explicit recipe
             messages.append(response)
-            messages.append(HumanMessage(
-                content="Please propose a final recipe in JSON format with keys: bits, pruning_ratio, layers_to_drop, method"
-            ))
+            messages.append(
+                HumanMessage(
+                    content="Please propose a final recipe in JSON format with keys: bits, pruning_ratio, layers_to_drop, method"
+                )
+            )
             tool_iterations += 1
-    
+
     # If we exhausted iterations without a recipe, use fallback
     if final_recipe is None:
         log_transition(
@@ -236,7 +264,7 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
             "status.warn",
         )
         return _fallback_recipe(state, "Max tool iterations reached")
-    
+
     # Check for duplicates
     if is_duplicate_recipe(final_recipe, history):
         log_transition(
@@ -245,16 +273,16 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
             "status.warn",
         )
         final_recipe = _modify_to_avoid_duplicate(final_recipe, history)
-    
+
     # Build reasoning summary
     reasoning_summary = _build_reasoning_summary(reasoning_steps)
-    
+
     log_transition(
         "Architect",
         f"[ReAct] Proposing: {final_recipe.bits}-bit, {final_recipe.pruning_ratio:.0%} pruning",
         "arch.node",
     )
-    
+
     current_iter = state.get("iteration", 0)
     return {
         "current_recipe": final_recipe,
@@ -286,14 +314,14 @@ def _fallback_recipe(state: SintraState, error: str) -> Dict[str, Any]:
         f"Using fallback recipe due to: {error}",
         "status.warn",
     )
-    
+
     fallback = ModelRecipe(
         bits=4,
         pruning_ratio=0.1,
         layers_to_drop=[],
         method="GGUF",
     )
-    
+
     return {
         "current_recipe": fallback,
         "iteration": state.get("iteration", 0) + 1,
@@ -305,14 +333,14 @@ def _format_past_attempts(history: List[Dict]) -> str:
     """Format past attempts for the prompt."""
     if not history:
         return "No previous attempts. This is the first iteration."
-    
+
     lines = []
     for i, entry in enumerate(history):
         recipe = entry.get("recipe")
         metrics = entry.get("metrics")
         status = "✓" if metrics.was_successful else "✗"
         lines.append(
-            f"{status} Attempt {i+1}: bits={recipe.bits}, pruning={recipe.pruning_ratio:.2f}, "
+            f"{status} Attempt {i + 1}: bits={recipe.bits}, pruning={recipe.pruning_ratio:.2f}, "
             f"layers_dropped={recipe.layers_to_drop} → TPS={metrics.actual_tps:.1f}, "
             f"accuracy={metrics.accuracy_score:.2f}"
         )
@@ -323,41 +351,44 @@ def _get_strategy_hints(history: List[Dict]) -> str:
     """Generate strategy hints based on history."""
     if not history:
         return "Start with a balanced approach: 4-bit quantization, minimal pruning."
-    
+
     variations = get_untried_variations(history)
     hints = []
-    
+
     if variations.get("untried_bits"):
         hints.append(f"Untried bit widths: {variations['untried_bits']}")
     if variations.get("untried_pruning"):
         hints.append(f"Untried pruning ratios: {variations['untried_pruning']}")
-    
+
     # Analyze trends
     last_result = history[-1]["metrics"]
     if last_result.actual_tps < 20:
         hints.append("Speed is low - consider more aggressive quantization or pruning")
     if last_result.accuracy_score < 0.6:
         hints.append("Accuracy is low - consider less aggressive compression")
-    
+
     return "\n".join(hints) if hints else "Continue exploring the search space."
 
 
-def _extract_recipe_from_response(response: AIMessage, state: SintraState) -> Optional[ModelRecipe]:
+def _extract_recipe_from_response(
+    response: AIMessage, state: SintraState
+) -> Optional[ModelRecipe]:
     """Try to extract a recipe from the LLM response."""
     content = response.content
-    
+
     # Try to parse JSON from content
     try:
         # Look for JSON block in the response
         import re
+
         json_match = re.search(r'\{[^{}]*"bits"[^{}]*\}', content, re.DOTALL)
         if json_match:
             recipe_data = json.loads(json_match.group())
-            
+
             # Handle nested recipe
             if "recipe" in recipe_data:
                 recipe_data = recipe_data["recipe"]
-            
+
             return ModelRecipe(
                 bits=recipe_data.get("bits", 4),
                 pruning_ratio=recipe_data.get("pruning_ratio", 0.1),
@@ -366,7 +397,7 @@ def _extract_recipe_from_response(response: AIMessage, state: SintraState) -> Op
             )
     except (json.JSONDecodeError, KeyError, TypeError) as e:
         logger.debug(f"Failed to parse recipe from response: {e}")
-    
+
     return None
 
 
@@ -374,7 +405,7 @@ def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: List[Dict]) -> Mode
     """Modify a recipe to make it unique."""
     bit_options = [2, 3, 4, 5, 6, 8]
     pruning_options = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-    
+
     # Try different bit widths first
     for bits in bit_options:
         if bits != recipe.bits:
@@ -386,7 +417,7 @@ def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: List[Dict]) -> Mode
             )
             if not is_duplicate_recipe(candidate, history):
                 return candidate
-    
+
     # Try different pruning ratios
     for pruning in pruning_options:
         if abs(pruning - recipe.pruning_ratio) > 0.05:
@@ -398,7 +429,7 @@ def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: List[Dict]) -> Mode
             )
             if not is_duplicate_recipe(candidate, history):
                 return candidate
-    
+
     # Last resort: change method
     return ModelRecipe(
         bits=recipe.bits,
@@ -412,12 +443,12 @@ def _build_reasoning_summary(steps: List[ReActStep]) -> str:
     """Build a human-readable summary of the reasoning chain."""
     if not steps:
         return "No reasoning steps recorded."
-    
+
     summary_parts = []
     for i, step in enumerate(steps, 1):
         if step.action == "tool_call":
             summary_parts.append(f"{i}. Called {step.tool_name}")
         elif step.action == "propose_recipe":
             summary_parts.append(f"{i}. Proposed final recipe")
-    
+
     return " → ".join(summary_parts)

@@ -20,20 +20,22 @@ logger = logging.getLogger(__name__)
 
 class ModelArchitecture(BaseModel):
     """Actual model architecture information from HuggingFace."""
-    
+
     model_id: str = Field(description="The HuggingFace model ID")
     num_layers: int = Field(description="Number of transformer layers")
     hidden_size: int = Field(description="Hidden dimension size")
     num_attention_heads: int = Field(description="Number of attention heads")
     vocab_size: int = Field(description="Vocabulary size")
     num_parameters: float = Field(description="Total parameters in billions")
-    architecture_type: str = Field(description="Model architecture (e.g., LlamaForCausalLM)")
+    architecture_type: str = Field(
+        description="Model architecture (e.g., LlamaForCausalLM)"
+    )
     max_position_embeddings: int = Field(description="Maximum context length")
 
 
 class ModelSearchResult(BaseModel):
     """Result from searching HuggingFace for similar models."""
-    
+
     model_id: str = Field(description="The HuggingFace model ID")
     downloads: int = Field(description="Number of downloads")
     likes: int = Field(description="Number of likes")
@@ -45,7 +47,7 @@ class ModelSearchResult(BaseModel):
 
 class CompressionEstimate(BaseModel):
     """Estimated impact of a compression configuration."""
-    
+
     estimated_size_gb: float = Field(description="Estimated model size in GB")
     estimated_tps_range: tuple[float, float] = Field(
         description="Expected TPS range (min, max)"
@@ -53,15 +55,13 @@ class CompressionEstimate(BaseModel):
     estimated_accuracy_loss: float = Field(
         description="Expected accuracy loss (0.0 to 1.0)"
     )
-    confidence: float = Field(
-        description="Confidence in this estimate (0.0 to 1.0)"
-    )
+    confidence: float = Field(description="Confidence in this estimate (0.0 to 1.0)")
     reasoning: str = Field(description="Explanation of the estimate")
 
 
 class HardwareCapability(BaseModel):
     """Hardware capability information."""
-    
+
     device_name: str = Field(description="Name of the device")
     available_vram_gb: float = Field(description="Available VRAM/RAM in GB")
     supports_4bit: bool = Field(description="Whether 4-bit quantization is supported")
@@ -80,24 +80,25 @@ class HardwareCapability(BaseModel):
 @tool
 def get_model_architecture(model_id: str) -> Dict[str, Any]:
     """Fetch the actual architecture of a model from HuggingFace.
-    
+
     ALWAYS use this tool before proposing layer dropping or pruning
     to know the exact number of layers, hidden size, and other details.
     This prevents suggesting invalid configurations like dropping layer 33
     when the model only has 32 layers.
-    
+
     Args:
         model_id: The HuggingFace model ID (e.g., "meta-llama/Meta-Llama-3-8B")
-        
+
     Returns:
         Model architecture details including layer count, hidden size, etc.
     """
     try:
-        from huggingface_hub import hf_hub_download, HfApi
         import json
-        
+
+        from huggingface_hub import HfApi, hf_hub_download
+
         api = HfApi()
-        
+
         # Try to get config.json from the model
         try:
             config_path = hf_hub_download(
@@ -112,37 +113,39 @@ def get_model_architecture(model_id: str) -> Dict[str, Any]:
             # Fall back to model info
             model_info = api.model_info(model_id)
             return _estimate_architecture_from_name(model_id, model_info)
-        
+
         # Extract architecture details
         num_layers = (
-            config.get("num_hidden_layers") or 
-            config.get("n_layer") or 
-            config.get("num_layers") or
-            32  # default
+            config.get("num_hidden_layers")
+            or config.get("n_layer")
+            or config.get("num_layers")
+            or 32  # default
         )
         hidden_size = (
-            config.get("hidden_size") or 
-            config.get("n_embd") or
-            config.get("d_model") or
-            4096
+            config.get("hidden_size")
+            or config.get("n_embd")
+            or config.get("d_model")
+            or 4096
         )
-        num_heads = (
-            config.get("num_attention_heads") or
-            config.get("n_head") or
-            32
-        )
+        num_heads = config.get("num_attention_heads") or config.get("n_head") or 32
         vocab_size = config.get("vocab_size", 32000)
         max_pos = (
-            config.get("max_position_embeddings") or
-            config.get("n_positions") or
-            config.get("max_seq_len") or
-            4096
+            config.get("max_position_embeddings")
+            or config.get("n_positions")
+            or config.get("max_seq_len")
+            or 4096
         )
-        arch_type = config.get("architectures", ["Unknown"])[0] if config.get("architectures") else config.get("model_type", "Unknown")
-        
+        arch_type = (
+            config.get("architectures", ["Unknown"])[0]
+            if config.get("architectures")
+            else config.get("model_type", "Unknown")
+        )
+
         # Estimate parameters
-        num_params = _estimate_parameters(num_layers, hidden_size, vocab_size, num_heads)
-        
+        num_params = _estimate_parameters(
+            num_layers, hidden_size, vocab_size, num_heads
+        )
+
         return {
             "success": True,
             "model_id": model_id,
@@ -153,11 +156,13 @@ def get_model_architecture(model_id: str) -> Dict[str, Any]:
             "num_parameters_billions": round(num_params / 1e9, 2),
             "architecture_type": arch_type,
             "max_position_embeddings": max_pos,
-            "safe_layers_to_drop": list(range(1, min(4, num_layers // 4))),  # Safe early layers
+            "safe_layers_to_drop": list(
+                range(1, min(4, num_layers // 4))
+            ),  # Safe early layers
             "layer_drop_limit": num_layers // 4,  # Max 25% layer drop recommended
             "note": f"Model has {num_layers} layers. Do NOT drop more than {num_layers // 4} layers.",
         }
-        
+
     except ImportError:
         logger.warning("huggingface_hub not installed, using estimates")
         return _estimate_architecture_from_name(model_id, None)
@@ -166,17 +171,19 @@ def get_model_architecture(model_id: str) -> Dict[str, Any]:
         return _estimate_architecture_from_name(model_id, None)
 
 
-def _estimate_parameters(num_layers: int, hidden_size: int, vocab_size: int, num_heads: int) -> float:
+def _estimate_parameters(
+    num_layers: int, hidden_size: int, vocab_size: int, num_heads: int
+) -> float:
     """Estimate total parameters based on architecture."""
     # Embedding parameters
     embed_params = vocab_size * hidden_size * 2  # input + output embeddings
-    
+
     # Per-layer parameters (attention + MLP)
     head_dim = hidden_size // num_heads
     attn_params = 4 * hidden_size * hidden_size  # Q, K, V, O projections
     mlp_params = 3 * hidden_size * (4 * hidden_size)  # up, gate, down (for LLaMA-style)
     layer_params = attn_params + mlp_params
-    
+
     total = embed_params + (num_layers * layer_params)
     return total
 
@@ -184,7 +191,7 @@ def _estimate_parameters(num_layers: int, hidden_size: int, vocab_size: int, num
 def _estimate_architecture_from_name(model_id: str, model_info: Any) -> Dict[str, Any]:
     """Estimate architecture based on model name patterns."""
     name_lower = model_id.lower()
-    
+
     # Common model configurations
     configs = {
         "70b": {"layers": 80, "hidden": 8192, "heads": 64, "params": 70},
@@ -198,17 +205,17 @@ def _estimate_architecture_from_name(model_id: str, model_info: Any) -> Dict[str
         "2b": {"layers": 24, "hidden": 2560, "heads": 32, "params": 2},
         "1b": {"layers": 16, "hidden": 2048, "heads": 16, "params": 1},
     }
-    
+
     # Find matching config
     matched = None
     for size_key, config in configs.items():
         if size_key in name_lower:
             matched = config
             break
-    
+
     if not matched:
         matched = configs["7b"]  # Default to 7B
-    
+
     return {
         "success": False,
         "estimated": True,
@@ -234,15 +241,15 @@ def search_similar_models(
     max_results: int = 5,
 ) -> List[Dict[str, Any]]:
     """Search HuggingFace for similar or quantized versions of a model.
-    
+
     Use this tool to find existing quantized versions of a model or
     similar models that might work better for the target hardware.
-    
+
     Args:
         base_model: The base model ID (e.g., "meta-llama/Llama-3.2-1B")
         task: The task type (e.g., "text-generation")
         max_results: Maximum number of results to return
-        
+
     Returns:
         List of similar models with their metadata
     """
@@ -260,35 +267,35 @@ def _search_huggingface_models(
 ) -> List[Dict[str, Any]]:
     """Search HuggingFace Hub for similar/quantized models."""
     from huggingface_hub import HfApi
-    
+
     api = HfApi()
     results = []
-    
+
     # Extract model name for search
     model_name = base_model.split("/")[-1]
-    
+
     # Search strategies:
     # 1. Search for GGUF versions (most common for edge deployment)
     # 2. Search for the base model name
     # 3. Search for quantized variants
-    
+
     search_queries = [
-        f"{model_name} GGUF",      # GGUF quantized versions
-        f"{model_name} AWQ",       # AWQ quantized
-        f"{model_name} GPTQ",      # GPTQ quantized
-        model_name,                # Base model variants
+        f"{model_name} GGUF",  # GGUF quantized versions
+        f"{model_name} AWQ",  # AWQ quantized
+        f"{model_name} GPTQ",  # GPTQ quantized
+        model_name,  # Base model variants
     ]
-    
+
     seen_ids = set()
-    
+
     for query in search_queries:
         if len(results) >= max_results:
             break
-            
+
         try:
             # Build filter for task if specified
             filter_str = task if task else None
-            
+
             models = api.list_models(
                 search=query,
                 sort="downloads",
@@ -296,47 +303,53 @@ def _search_huggingface_models(
                 limit=max_results,
                 filter=filter_str,
             )
-            
+
             for model in models:
                 if model.id in seen_ids:
                     continue
                 seen_ids.add(model.id)
-                
+
                 # Detect quantization type from tags or name
                 quant_info = _detect_quantization_type(model.id, model.tags or [])
-                
-                results.append({
-                    "model_id": model.id,
-                    "downloads": model.downloads or 0,
-                    "likes": model.likes or 0,
-                    "tags": list(model.tags or []),
-                    "quantization_info": quant_info,
-                    "author": model.author or "unknown",
-                    "last_modified": str(model.last_modified) if model.last_modified else None,
-                })
-                
+
+                results.append(
+                    {
+                        "model_id": model.id,
+                        "downloads": model.downloads or 0,
+                        "likes": model.likes or 0,
+                        "tags": list(model.tags or []),
+                        "quantization_info": quant_info,
+                        "author": model.author or "unknown",
+                        "last_modified": str(model.last_modified)
+                        if model.last_modified
+                        else None,
+                    }
+                )
+
                 if len(results) >= max_results:
                     break
-                    
+
         except Exception as e:
             logger.debug(f"Search query '{query}' failed: {e}")
             continue
-    
+
     if not results:
         # If no results, return the original model info
         try:
             model_info = api.model_info(base_model)
-            results.append({
-                "model_id": base_model,
-                "downloads": model_info.downloads or 0,
-                "likes": model_info.likes or 0,
-                "tags": list(model_info.tags or []),
-                "quantization_info": "Original model - no quantized versions found",
-                "author": model_info.author or "unknown",
-            })
+            results.append(
+                {
+                    "model_id": base_model,
+                    "downloads": model_info.downloads or 0,
+                    "likes": model_info.likes or 0,
+                    "tags": list(model_info.tags or []),
+                    "quantization_info": "Original model - no quantized versions found",
+                    "author": model_info.author or "unknown",
+                }
+            )
         except Exception:
             pass
-    
+
     return results[:max_results]
 
 
@@ -344,9 +357,9 @@ def _detect_quantization_type(model_id: str, tags: List[str]) -> str:
     """Detect quantization type from model ID and tags."""
     model_lower = model_id.lower()
     tags_lower = [t.lower() for t in tags]
-    
+
     quant_types = []
-    
+
     # Check for GGUF
     if "gguf" in model_lower or "gguf" in tags_lower:
         # Try to find specific quant type
@@ -355,25 +368,25 @@ def _detect_quantization_type(model_id: str, tags: List[str]) -> str:
                 quant_types.append(q.upper())
         if not quant_types:
             quant_types.append("GGUF (various)")
-    
+
     # Check for AWQ
     if "awq" in model_lower or "awq" in tags_lower:
         quant_types.append("AWQ 4-bit")
-    
+
     # Check for GPTQ
     if "gptq" in model_lower or "gptq" in tags_lower:
         quant_types.append("GPTQ 4-bit")
-    
+
     # Check for bitsandbytes
     if "4bit" in model_lower or "8bit" in model_lower:
         if "4bit" in model_lower:
             quant_types.append("4-bit")
         if "8bit" in model_lower:
             quant_types.append("8-bit")
-    
+
     if quant_types:
         return ", ".join(quant_types)
-    
+
     return "Base model (not quantized)"
 
 
@@ -385,53 +398,61 @@ def _fallback_model_search(
     """Fallback search when HuggingFace API is unavailable."""
     model_family = base_model.split("/")[-1].lower()
     results = []
-    
+
     # Common quantized model patterns
     if "llama" in model_family:
-        results.extend([
-            {
-                "model_id": "TheBloke/Llama-2-7B-GGUF",
-                "downloads": 500000,
-                "likes": 1200,
-                "tags": ["gguf", "llama", "quantized"],
-                "quantization_info": "Q4_K_M, Q5_K_M, Q8_0 available",
-                "note": "Fallback result - HuggingFace API unavailable",
-            },
-        ])
+        results.extend(
+            [
+                {
+                    "model_id": "TheBloke/Llama-2-7B-GGUF",
+                    "downloads": 500000,
+                    "likes": 1200,
+                    "tags": ["gguf", "llama", "quantized"],
+                    "quantization_info": "Q4_K_M, Q5_K_M, Q8_0 available",
+                    "note": "Fallback result - HuggingFace API unavailable",
+                },
+            ]
+        )
     elif "mistral" in model_family:
-        results.extend([
-            {
-                "model_id": "TheBloke/Mistral-7B-GGUF",
-                "downloads": 400000,
-                "likes": 950,
-                "tags": ["gguf", "mistral", "quantized"],
-                "quantization_info": "Q4_K_M recommended for edge",
-                "note": "Fallback result - HuggingFace API unavailable",
-            },
-        ])
+        results.extend(
+            [
+                {
+                    "model_id": "TheBloke/Mistral-7B-GGUF",
+                    "downloads": 400000,
+                    "likes": 950,
+                    "tags": ["gguf", "mistral", "quantized"],
+                    "quantization_info": "Q4_K_M recommended for edge",
+                    "note": "Fallback result - HuggingFace API unavailable",
+                },
+            ]
+        )
     elif "phi" in model_family:
-        results.extend([
-            {
-                "model_id": "microsoft/phi-2-gguf",
-                "downloads": 300000,
-                "likes": 700,
-                "tags": ["gguf", "phi", "small"],
-                "quantization_info": "2.7B params, excellent for edge",
-                "note": "Fallback result - HuggingFace API unavailable",
-            },
-        ])
-    
+        results.extend(
+            [
+                {
+                    "model_id": "microsoft/phi-2-gguf",
+                    "downloads": 300000,
+                    "likes": 700,
+                    "tags": ["gguf", "phi", "small"],
+                    "quantization_info": "2.7B params, excellent for edge",
+                    "note": "Fallback result - HuggingFace API unavailable",
+                },
+            ]
+        )
+
     # Generic fallback
     if not results:
-        results.append({
-            "model_id": base_model,
-            "downloads": 0,
-            "likes": 0,
-            "tags": [task],
-            "quantization_info": "Could not search HuggingFace - using original model",
-            "note": "Fallback result - HuggingFace API unavailable",
-        })
-    
+        results.append(
+            {
+                "model_id": base_model,
+                "downloads": 0,
+                "likes": 0,
+                "tags": [task],
+                "quantization_info": "Could not search HuggingFace - using original model",
+                "note": "Fallback result - HuggingFace API unavailable",
+            }
+        )
+
     return results[:max_results]
 
 
@@ -444,69 +465,91 @@ def estimate_compression_impact(
     total_layers: int = 32,
 ) -> Dict[str, Any]:
     """Estimate the impact of compression settings on model performance.
-    
+
     Use this tool before proposing a recipe to predict whether it will
     meet the hardware constraints and performance targets.
-    
+
     Args:
         model_size_billions: Original model size in billions of parameters
         target_bits: Target quantization bits (2, 3, 4, 5, 6, or 8)
         pruning_ratio: Fraction of weights to prune (0.0 to 0.5)
         layers_to_drop: Number of layers to remove
         total_layers: Total number of layers in the model
-        
+
     Returns:
         Estimated performance metrics and recommendations
     """
     # Base calculations
     base_size_gb = model_size_billions * 2  # FP16 baseline
-    
+
     # Quantization impact
     bit_multiplier = target_bits / 16.0
     quantized_size = base_size_gb * bit_multiplier
-    
+
     # Pruning impact (structured pruning reduces size)
     pruned_size = quantized_size * (1 - pruning_ratio * 0.3)
-    
+
     # Layer dropping impact
     layer_reduction = layers_to_drop / total_layers
     final_size = pruned_size * (1 - layer_reduction)
-    
+
     # TPS estimation (inverse relationship with size, rough heuristic)
     base_tps = 10.0  # Baseline TPS for FP16
     tps_boost_from_quant = (16 - target_bits) * 1.5
     tps_boost_from_pruning = pruning_ratio * 15
     tps_boost_from_layers = layer_reduction * 20
-    
-    estimated_tps = base_tps + tps_boost_from_quant + tps_boost_from_pruning + tps_boost_from_layers
+
+    estimated_tps = (
+        base_tps + tps_boost_from_quant + tps_boost_from_pruning + tps_boost_from_layers
+    )
     tps_variance = estimated_tps * 0.2
-    
+
     # Accuracy estimation
     accuracy_loss_from_quant = max(0, (8 - target_bits) * 0.02)
     accuracy_loss_from_pruning = pruning_ratio * 0.15
     accuracy_loss_from_layers = layer_reduction * 0.25
-    
-    total_accuracy_loss = min(0.5, accuracy_loss_from_quant + accuracy_loss_from_pruning + accuracy_loss_from_layers)
-    
+
+    total_accuracy_loss = min(
+        0.5,
+        accuracy_loss_from_quant
+        + accuracy_loss_from_pruning
+        + accuracy_loss_from_layers,
+    )
+
     # Confidence based on how aggressive the compression is
-    aggressiveness = (accuracy_loss_from_quant + accuracy_loss_from_pruning + accuracy_loss_from_layers) / 0.5
+    aggressiveness = (
+        accuracy_loss_from_quant
+        + accuracy_loss_from_pruning
+        + accuracy_loss_from_layers
+    ) / 0.5
     confidence = max(0.3, 1.0 - aggressiveness * 0.5)
-    
+
     # Generate reasoning
     reasoning_parts = []
     if target_bits <= 4:
-        reasoning_parts.append(f"{target_bits}-bit quantization provides good compression with moderate quality loss")
+        reasoning_parts.append(
+            f"{target_bits}-bit quantization provides good compression with moderate quality loss"
+        )
     if pruning_ratio > 0.2:
-        reasoning_parts.append(f"{pruning_ratio:.0%} pruning is aggressive, expect noticeable accuracy impact")
+        reasoning_parts.append(
+            f"{pruning_ratio:.0%} pruning is aggressive, expect noticeable accuracy impact"
+        )
     if layers_to_drop > 0:
-        reasoning_parts.append(f"Dropping {layers_to_drop} layers removes {layer_reduction:.0%} of model capacity")
-    
+        reasoning_parts.append(
+            f"Dropping {layers_to_drop} layers removes {layer_reduction:.0%} of model capacity"
+        )
+
     return {
         "estimated_size_gb": round(final_size, 2),
-        "estimated_tps_range": (round(estimated_tps - tps_variance, 1), round(estimated_tps + tps_variance, 1)),
+        "estimated_tps_range": (
+            round(estimated_tps - tps_variance, 1),
+            round(estimated_tps + tps_variance, 1),
+        ),
         "estimated_accuracy_loss": round(total_accuracy_loss, 3),
         "confidence": round(confidence, 2),
-        "reasoning": " | ".join(reasoning_parts) if reasoning_parts else "Standard compression settings",
+        "reasoning": " | ".join(reasoning_parts)
+        if reasoning_parts
+        else "Standard compression settings",
         "recommendations": {
             "safe_for_production": total_accuracy_loss < 0.1,
             "good_for_edge": final_size < 4.0 and estimated_tps > 20,
@@ -523,23 +566,23 @@ def query_hardware_capabilities(
     gpu_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Query what compression configurations are supported by the target hardware.
-    
+
     Use this tool to understand what quantization methods and model sizes
     can run on the target device.
-    
+
     Args:
         device_name: Name of the device (e.g., "Raspberry Pi 5", "Mac Mini M4")
         available_memory_gb: Available RAM/VRAM in GB
         has_gpu: Whether the device has a GPU
         gpu_type: Type of GPU if available (e.g., "CUDA", "Metal", "None")
-        
+
     Returns:
         Hardware capabilities and recommendations
     """
     # Determine supported quantization based on hardware
     supported_bits = []
     recommended_bits = []
-    
+
     if available_memory_gb >= 16:
         supported_bits = [2, 3, 4, 5, 6, 8]
         recommended_bits = [4, 5]
@@ -556,11 +599,11 @@ def query_hardware_capabilities(
         supported_bits = [2, 3]
         recommended_bits = [2, 3]
         max_params = 0.5
-    
+
     # GPU-specific recommendations
     supports_4bit = True
     supports_8bit = available_memory_gb >= 8
-    
+
     if has_gpu:
         if gpu_type == "CUDA":
             # CUDA supports all quantization methods
@@ -570,7 +613,7 @@ def query_hardware_capabilities(
             # Metal (Apple Silicon) is efficient
             supported_bits = [2, 3, 4, 5, 6, 8]
             max_params *= 1.3
-    
+
     return {
         "device_name": device_name,
         "available_vram_gb": available_memory_gb,
@@ -593,15 +636,15 @@ def lookup_quantization_benchmarks(
     bits: int,
 ) -> Dict[str, Any]:
     """Look up known benchmark results for a model family at a specific bit width.
-    
+
     Use this tool to see what performance others have achieved with
     similar compression settings. First checks local history database,
     then falls back to reference benchmarks.
-    
+
     Args:
         model_family: Model family (e.g., "llama", "mistral", "phi")
         bits: Quantization bit width
-        
+
     Returns:
         Known benchmark results and recommendations
     """
@@ -609,7 +652,7 @@ def lookup_quantization_benchmarks(
     history_results = _lookup_from_history(model_family, bits)
     if history_results:
         return history_results
-    
+
     # Fall back to reference benchmarks
     return _lookup_reference_benchmarks(model_family, bits)
 
@@ -618,9 +661,9 @@ def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any
     """Look up benchmark results from Sintra's own history database."""
     try:
         from sintra.persistence import get_history_db
-        
+
         db = get_history_db()
-        
+
         # Query for successful runs matching model family and bits
         query = """
             SELECT 
@@ -637,29 +680,31 @@ def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any
             ORDER BY created_at DESC
             LIMIT 10
         """
-        
+
         family_pattern = f"%{model_family}%"
         cursor = db.execute(query, (family_pattern, bits))
         rows = cursor.fetchall()
-        
+
         if not rows:
             return None
-        
+
         # Aggregate results
         tps_values = [row[3] for row in rows if row[3]]
         accuracy_values = [row[4] for row in rows if row[4]]
-        
+
         if not tps_values:
             return None
-        
+
         avg_tps = sum(tps_values) / len(tps_values)
         min_tps = min(tps_values)
         max_tps = max(tps_values)
-        avg_accuracy = sum(accuracy_values) / len(accuracy_values) if accuracy_values else 0.8
-        
+        avg_accuracy = (
+            sum(accuracy_values) / len(accuracy_values) if accuracy_values else 0.8
+        )
+
         # Estimate accuracy drop from baseline (assuming 0.9 baseline)
         accuracy_drop = max(0, 0.9 - avg_accuracy)
-        
+
         # Determine quality rating
         if accuracy_drop < 0.02:
             quality = "excellent"
@@ -671,7 +716,7 @@ def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any
             quality = "medium"
         else:
             quality = "low"
-        
+
         return {
             "found": True,
             "source": "local_history",
@@ -695,9 +740,9 @@ def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any
                 for row in rows[:3]  # Top 3 samples
             ],
             "recommendation": f"Based on {len(rows)} local runs: {bits}-bit {model_family} achieves "
-                             f"~{avg_tps:.1f} TPS with {quality} quality",
+            f"~{avg_tps:.1f} TPS with {quality} quality",
         }
-        
+
     except Exception as e:
         logger.debug(f"Could not query history database: {e}")
         return None
@@ -713,7 +758,11 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
             4: {"tps_range": (15, 30), "accuracy_drop": 0.04, "quality": "good"},
             5: {"tps_range": (12, 25), "accuracy_drop": 0.02, "quality": "very_good"},
             6: {"tps_range": (10, 20), "accuracy_drop": 0.01, "quality": "excellent"},
-            8: {"tps_range": (8, 15), "accuracy_drop": 0.005, "quality": "near_original"},
+            8: {
+                "tps_range": (8, 15),
+                "accuracy_drop": 0.005,
+                "quality": "near_original",
+            },
         },
         "mistral": {
             2: {"tps_range": (28, 45), "accuracy_drop": 0.12, "quality": "medium"},
@@ -721,30 +770,50 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
             4: {"tps_range": (18, 32), "accuracy_drop": 0.03, "quality": "very_good"},
             5: {"tps_range": (14, 26), "accuracy_drop": 0.015, "quality": "excellent"},
             6: {"tps_range": (11, 21), "accuracy_drop": 0.008, "quality": "excellent"},
-            8: {"tps_range": (9, 16), "accuracy_drop": 0.003, "quality": "near_original"},
+            8: {
+                "tps_range": (9, 16),
+                "accuracy_drop": 0.003,
+                "quality": "near_original",
+            },
         },
         "phi": {
             2: {"tps_range": (35, 55), "accuracy_drop": 0.10, "quality": "good"},
             3: {"tps_range": (30, 48), "accuracy_drop": 0.05, "quality": "very_good"},
             4: {"tps_range": (25, 42), "accuracy_drop": 0.025, "quality": "excellent"},
             5: {"tps_range": (20, 35), "accuracy_drop": 0.012, "quality": "excellent"},
-            6: {"tps_range": (16, 28), "accuracy_drop": 0.006, "quality": "near_original"},
-            8: {"tps_range": (12, 22), "accuracy_drop": 0.002, "quality": "near_original"},
+            6: {
+                "tps_range": (16, 28),
+                "accuracy_drop": 0.006,
+                "quality": "near_original",
+            },
+            8: {
+                "tps_range": (12, 22),
+                "accuracy_drop": 0.002,
+                "quality": "near_original",
+            },
         },
         "qwen": {
             3: {"tps_range": (22, 38), "accuracy_drop": 0.07, "quality": "good"},
             4: {"tps_range": (18, 32), "accuracy_drop": 0.035, "quality": "very_good"},
             5: {"tps_range": (14, 26), "accuracy_drop": 0.018, "quality": "excellent"},
-            8: {"tps_range": (9, 16), "accuracy_drop": 0.004, "quality": "near_original"},
+            8: {
+                "tps_range": (9, 16),
+                "accuracy_drop": 0.004,
+                "quality": "near_original",
+            },
         },
         "gemma": {
             3: {"tps_range": (24, 40), "accuracy_drop": 0.06, "quality": "good"},
             4: {"tps_range": (20, 35), "accuracy_drop": 0.03, "quality": "very_good"},
             5: {"tps_range": (16, 28), "accuracy_drop": 0.015, "quality": "excellent"},
-            8: {"tps_range": (10, 18), "accuracy_drop": 0.003, "quality": "near_original"},
+            8: {
+                "tps_range": (10, 18),
+                "accuracy_drop": 0.003,
+                "quality": "near_original",
+            },
         },
     }
-    
+
     # Normalize model family
     family_lower = model_family.lower()
     matched_family = None
@@ -752,7 +821,7 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
         if known_family in family_lower:
             matched_family = known_family
             break
-    
+
     if not matched_family:
         return {
             "found": False,
@@ -764,14 +833,14 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
                 "quality": "unknown",
             },
         }
-    
+
     if bits not in benchmarks[matched_family]:
         return {
             "found": False,
             "source": "reference",
             "message": f"No data for {bits}-bit quantization of {matched_family}",
         }
-    
+
     data = benchmarks[matched_family][bits]
     return {
         "found": True,
@@ -780,7 +849,7 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
         "bits": bits,
         "benchmark_results": data,
         "recommendation": f"{bits}-bit {matched_family} typically achieves {data['quality']} quality "
-                         f"with TPS in range {data['tps_range']} and ~{data['accuracy_drop']:.1%} accuracy drop",
+        f"with TPS in range {data['tps_range']} and ~{data['accuracy_drop']:.1%} accuracy drop",
     }
 
 

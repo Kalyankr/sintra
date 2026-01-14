@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 class BenchmarkExecutor(ABC):
     """Abstract base class for benchmark executors."""
-    
+
     @abstractmethod
     def run_benchmark(
         self, recipe: ModelRecipe, profile: HardwareProfile
     ) -> ExperimentResult:
         """Execute a benchmark with the given recipe and hardware profile.
-        
+
         Args:
             recipe: The compression recipe to test.
             profile: The target hardware profile.
-            
+
         Returns:
             ExperimentResult with metrics and success status.
         """
@@ -46,15 +46,16 @@ class StandaloneExecutor(BenchmarkExecutor):
         env["VRAM_LIMIT_GB"] = str(profile.constraints.vram_gb)
 
         # Find the worker script
-        import sintra
         import pathlib
+
+        import sintra
+
         package_dir = pathlib.Path(sintra.__file__).parent
         worker_script = package_dir / "benchmarks" / "worker" / "runner.py"
-        
+
         if not worker_script.exists():
             return self._error_result(
-                f"Worker script not found at {worker_script}. "
-                "Please reinstall sintra."
+                f"Worker script not found at {worker_script}. Please reinstall sintra."
             )
 
         with console.status(f"[bold green]Running {recipe.method} Surgery...") as _:
@@ -112,14 +113,14 @@ class StandaloneExecutor(BenchmarkExecutor):
 
 class MockExecutor(BenchmarkExecutor):
     """Simulates hardware behavior for testing the Agent's logic loop.
-    
+
     Uses deterministic calculations with optional random noise for realistic
     simulation of compression trade-offs.
     """
 
     def __init__(self, seed: int | None = None) -> None:
         """Initialize the mock executor.
-        
+
         Args:
             seed: Random seed for reproducible results. If None, uses system random.
         """

@@ -62,7 +62,9 @@ class TestSilentProgressReporter:
     def test_update_does_nothing(self):
         """Should not raise on update."""
         reporter = SilentProgressReporter()
-        reporter.update(ProgressInfo(stage=ProgressStage.DOWNLOAD, current=50, total=100))
+        reporter.update(
+            ProgressInfo(stage=ProgressStage.DOWNLOAD, current=50, total=100)
+        )
 
     def test_complete_does_nothing(self):
         """Should not raise on complete."""
@@ -82,10 +84,10 @@ class TestCallbackProgressReporter:
         """Should call callback on update."""
         calls = []
         reporter = CallbackProgressReporter(lambda info: calls.append(info))
-        
+
         info = ProgressInfo(stage=ProgressStage.DOWNLOAD, current=50, total=100)
         reporter.update(info)
-        
+
         assert len(calls) == 1
         assert calls[0] == info
 
@@ -93,9 +95,9 @@ class TestCallbackProgressReporter:
         """Should call callback on complete."""
         calls = []
         reporter = CallbackProgressReporter(lambda info: calls.append(info))
-        
+
         reporter.complete(ProgressStage.DOWNLOAD, "Done")
-        
+
         assert len(calls) == 1
         assert calls[0].stage == ProgressStage.DOWNLOAD
         assert calls[0].current == 100
@@ -105,9 +107,9 @@ class TestCallbackProgressReporter:
         """Should call callback on error."""
         calls = []
         reporter = CallbackProgressReporter(lambda info: calls.append(info))
-        
+
         reporter.error(ProgressStage.DOWNLOAD, "Network failure")
-        
+
         assert len(calls) == 1
         assert calls[0].stage == ProgressStage.DOWNLOAD
         assert "Network failure" in calls[0].message
@@ -127,7 +129,7 @@ class TestGlobalReporter:
         custom = CallbackProgressReporter(lambda x: None)
         set_global_reporter(custom)
         assert get_global_reporter() is custom
-        
+
         # Reset for other tests
         set_global_reporter(None)
 
@@ -136,13 +138,13 @@ class TestGlobalReporter:
         calls = []
         custom = CallbackProgressReporter(lambda info: calls.append(info))
         set_global_reporter(custom)
-        
+
         report_progress(ProgressStage.DOWNLOAD, 50, 100, "Halfway")
-        
+
         assert len(calls) == 1
         assert calls[0].stage == ProgressStage.DOWNLOAD
         assert calls[0].percentage == 50.0
-        
+
         set_global_reporter(None)
 
     def test_report_complete_uses_global(self):
@@ -150,12 +152,12 @@ class TestGlobalReporter:
         calls = []
         custom = CallbackProgressReporter(lambda info: calls.append(info))
         set_global_reporter(custom)
-        
+
         report_complete(ProgressStage.DOWNLOAD, "All done")
-        
+
         assert len(calls) == 1
         assert calls[0].is_complete is True
-        
+
         set_global_reporter(None)
 
     def test_report_error_uses_global(self):
@@ -163,12 +165,12 @@ class TestGlobalReporter:
         calls = []
         custom = CallbackProgressReporter(lambda info: calls.append(info))
         set_global_reporter(custom)
-        
+
         report_error(ProgressStage.DOWNLOAD, "Failed!")
-        
+
         assert len(calls) == 1
         assert "Failed!" in calls[0].message
-        
+
         set_global_reporter(None)
 
 
