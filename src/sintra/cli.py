@@ -124,6 +124,11 @@ def parse_args() -> argparse.Namespace:
     # Agentic Features
     group_agentic = parser.add_argument_group("Agentic Features")
     group_agentic.add_argument(
+        "--plan",
+        action="store_true",
+        help="Enable planner agent to create optimization strategy",
+    )
+    group_agentic.add_argument(
         "--react",
         action="store_true",
         help="Use ReAct-style architect with tool use (more agentic)",
@@ -141,7 +146,7 @@ def parse_args() -> argparse.Namespace:
     group_agentic.add_argument(
         "--agentic",
         action="store_true",
-        help="Enable all agentic features (--react --reflect --llm-routing)",
+        help="Enable all agentic features (--plan --react --reflect --llm-routing)",
     )
 
     # Debug Mode

@@ -20,6 +20,7 @@ from sintra.agents.nodes import (
     critic_router_llm,
     reporter_node,
 )
+from sintra.agents.planner import planner_node
 from sintra.agents.react_architect import react_architect_node
 from sintra.agents.reflector import reflector_node
 from sintra.agents.state import SintraState
@@ -38,8 +39,17 @@ from sintra.ui.console import console, log_transition
 from sintra.ui.progress import ConsoleProgressReporter, set_global_reporter
 
 
-def build_sintra_workflow(use_react: bool = False, use_reflection: bool = False, use_llm_routing: bool = False):
+def build_sintra_workflow(
+    use_planner: bool = False,
+    use_react: bool = False,
+    use_reflection: bool = False,
+    use_llm_routing: bool = False,
+):
     workflow = StateGraph(SintraState)
+
+    # Optional: Add planner for strategic optimization
+    if use_planner:
+        workflow.add_node("planner", planner_node)
 
     # Define the "Actors" - choose architect based on mode
     if use_react:
@@ -56,7 +66,12 @@ def build_sintra_workflow(use_react: bool = False, use_reflection: bool = False,
         workflow.add_node("reflector", reflector_node)
 
     # Define the "Path"
-    workflow.set_entry_point("architect")
+    if use_planner:
+        workflow.set_entry_point("planner")
+        workflow.add_edge("planner", "architect")
+    else:
+        workflow.set_entry_point("architect")
+    
     workflow.add_edge("architect", "benchmarker")
     workflow.add_edge("benchmarker", "critic")
 
@@ -212,6 +227,7 @@ def main():
             "reasoning_summary": None,
             "reflection": None,
             "strategy_adjustments": None,
+            "optimization_plan": None,
         }
     else:
         # Update resumed state with current session settings
@@ -221,6 +237,7 @@ def main():
         initial_state["run_id"] = run_id
 
     # Handle --agentic flag (enables all agentic features)
+    use_planner = getattr(args, 'plan', False) or getattr(args, 'agentic', False)
     use_react = getattr(args, 'react', False) or getattr(args, 'agentic', False)
     use_reflect = getattr(args, 'reflect', False) or getattr(args, 'agentic', False)
     use_llm_routing = getattr(args, 'llm_routing', False) or getattr(args, 'agentic', False)
@@ -228,6 +245,8 @@ def main():
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
     )
+    if use_planner:
+        log_transition("System", "Planner agent enabled for strategy creation", "arch.node")
     if use_react:
         log_transition("System", "Using ReAct-style architect with tool use", "arch.node")
     if use_reflect:
@@ -239,6 +258,7 @@ def main():
 
     # Run Workflow - use ReAct architect and reflection if flags are set
     app = build_sintra_workflow(
+        use_planner=use_planner,
         use_react=use_react,
         use_reflection=use_reflect,
         use_llm_routing=use_llm_routing,
