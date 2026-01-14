@@ -1,7 +1,8 @@
 import os
-from typing import Union
+from typing import List, Union
 
 from langchain_anthropic import ChatAnthropic
+from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
@@ -25,14 +26,14 @@ class MissingAPIKeyError(Exception):
     pass
 
 
-def get_architect_llm(config: LLMConfig) -> StructuredLLM:
-    """Returns an LLM instance with structured output capabilities.
+def _get_base_llm(config: LLMConfig) -> BaseChatModel:
+    """Returns a base LLM instance without structured output binding.
     
     Args:
         config: LLM configuration with provider, model name, and temperature.
     
     Returns:
-        An LLM instance bound to ModelRecipe schema for structured output.
+        A base LLM instance.
     
     Raises:
         MissingAPIKeyError: If the required API key is not set.
@@ -47,26 +48,22 @@ def get_architect_llm(config: LLMConfig) -> StructuredLLM:
                 f"Add it to your .env file or export it in your shell."
             )
 
-    llm: StructuredLLM
-
     if config.provider == LLMProvider.OPENAI:
-        llm = ChatOpenAI(model=config.model_name, temperature=config.temperature)
+        return ChatOpenAI(model=config.model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.ANTHROPIC:
-        llm = ChatAnthropic(model=config.model_name, temperature=config.temperature)
+        return ChatAnthropic(model=config.model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.GOOGLE:
         # Normalize model name - some LangChain versions require 'models/' prefix
         model_name = config.model_name
         if not model_name.startswith("models/"):
             model_name = f"models/{model_name}"
-
-        llm = ChatGoogleGenerativeAI(model=model_name, temperature=config.temperature)
+        return ChatGoogleGenerativeAI(model=model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.OLLAMA:
         from langchain_ollama import ChatOllama
-
-        llm = ChatOllama(
+        return ChatOllama(
             model=config.model_name,
             temperature=config.temperature,
             num_ctx=4096,
@@ -76,5 +73,53 @@ def get_architect_llm(config: LLMConfig) -> StructuredLLM:
     else:
         raise ValueError(f"Provider {config.provider} not supported.")
 
+
+def get_architect_llm(config: LLMConfig) -> StructuredLLM:
+    """Returns an LLM instance with structured output capabilities.
+    
+    Args:
+        config: LLM configuration with provider, model name, and temperature.
+    
+    Returns:
+        An LLM instance bound to ModelRecipe schema for structured output.
+    
+    Raises:
+        MissingAPIKeyError: If the required API key is not set.
+        ValueError: If the provider is not supported.
+    """
+    llm = _get_base_llm(config)
     # Bind the Pydantic model to ensure the LLM returns a ModelRecipe object
     return llm.with_structured_output(ModelRecipe)
+
+
+def get_tool_enabled_llm(config: LLMConfig, tools: List) -> BaseChatModel:
+    """Returns an LLM instance with tool-calling capabilities.
+    
+    Args:
+        config: LLM configuration with provider, model name, and temperature.
+        tools: List of tools to bind to the LLM.
+    
+    Returns:
+        An LLM instance with tools bound.
+    
+    Raises:
+        MissingAPIKeyError: If the required API key is not set.
+        ValueError: If the provider is not supported.
+    """
+    llm = _get_base_llm(config)
+    return llm.bind_tools(tools)
+
+
+def get_critic_llm(config: LLMConfig) -> BaseChatModel:
+    """Returns an LLM instance for the critic agent.
+    
+    The critic uses a simpler interface without structured output
+    to provide free-form feedback and routing decisions.
+    
+    Args:
+        config: LLM configuration with provider, model name, and temperature.
+    
+    Returns:
+        A base LLM instance for critic reasoning.
+    """
+    return _get_base_llm(config)
