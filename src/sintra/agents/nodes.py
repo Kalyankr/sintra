@@ -433,6 +433,172 @@ def critic_router(state: SintraState) -> str:
     return "architect"
 
 
+# ============================================================================
+# LLM-Based Routing (Alternative to rule-based critic_router)
+# ============================================================================
+
+from pydantic import BaseModel, Field
+from typing import Literal
+
+
+class RoutingDecision(BaseModel):
+    """LLM's decision about whether to continue or stop optimization."""
+    
+    decision: Literal["continue", "stop"] = Field(
+        description="Whether to continue optimization or stop"
+    )
+    confidence: float = Field(
+        ge=0.0, le=1.0,
+        description="Confidence in this decision (0-1)"
+    )
+    reasoning: str = Field(
+        description="Brief explanation of why this decision was made"
+    )
+    suggestion: str = Field(
+        default="",
+        description="Optional suggestion for the architect if continuing"
+    )
+
+
+CRITIC_ROUTER_PROMPT = """You are the Critic agent in an LLM compression optimization system.
+
+Your job is to decide whether to:
+1. **CONTINUE** optimization (route to architect) - if targets aren't met or we can do better
+2. **STOP** optimization (route to reporter) - if targets are met or further improvement is unlikely
+
+## Current Targets
+- Minimum TPS: {target_tps}
+- Minimum Accuracy: {target_accuracy}
+- Maximum VRAM: {vram_limit} GB
+
+## Current Iteration: {iteration} / {max_iterations}
+
+## Latest Result
+- Recipe: {recipe_bits}-bit, {recipe_pruning:.0%} pruning, {layers_dropped} layers dropped
+- Actual TPS: {actual_tps} (target: {target_tps})
+- Actual Accuracy: {actual_accuracy} (target: {target_accuracy})
+- Actual VRAM: {actual_vram} GB (limit: {vram_limit} GB)
+- Status: {status}
+
+## Recent History
+{history_summary}
+
+## Decision Guidelines
+- If ALL targets are met → STOP (we succeeded!)
+- If we're at max iterations → STOP (accept best result)
+- If we've tried many similar recipes without improvement → STOP (likely stuck)
+- If there's clear room for improvement → CONTINUE
+- If the last attempt crashed → CONTINUE (try different approach)
+
+Respond with JSON:
+```json
+{{
+    "decision": "continue" or "stop",
+    "confidence": 0.0 to 1.0,
+    "reasoning": "Brief explanation",
+    "suggestion": "Hint for architect if continuing"
+}}
+```
+"""
+
+
+def critic_router_llm(state: SintraState) -> str:
+    """
+    LLM-based routing decision for more nuanced optimization control.
+    
+    Uses an LLM to decide whether to continue optimization or stop,
+    allowing for more sophisticated reasoning about trade-offs.
+    
+    Falls back to rule-based routing if LLM fails.
+    """
+    from sintra.agents.factory import get_critic_llm
+    
+    # Quick exits that don't need LLM
+    if state.get("use_debug") or state.get("is_converged"):
+        return "reporter"
+    
+    if state.get("iteration", 0) >= MAX_ITERATIONS:
+        log_transition(
+            "Critic",
+            f"[LLM] Max iterations ({MAX_ITERATIONS}) reached.",
+            "status.warn",
+        )
+        return "reporter"
+    
+    if not state["history"]:
+        return "architect"
+    
+    # Prepare context for LLM
+    last_experiment = state["history"][-1]
+    metrics = last_experiment["metrics"]
+    recipe = last_experiment["recipe"]
+    profile = state["profile"]
+    
+    # Format history summary
+    history_lines = []
+    for i, entry in enumerate(state["history"][-5:], 1):  # Last 5 attempts
+        m = entry["metrics"]
+        r = entry["recipe"]
+        status = "✓" if m.was_successful else "✗"
+        history_lines.append(
+            f"  {i}. [{status}] {r.bits}-bit, {r.pruning_ratio:.0%} prune → "
+            f"TPS={m.actual_tps:.1f}, Acc={m.accuracy_score:.2f}"
+        )
+    
+    prompt = CRITIC_ROUTER_PROMPT.format(
+        target_tps=profile.targets.min_tokens_per_second,
+        target_accuracy=profile.targets.min_accuracy_score,
+        vram_limit=profile.constraints.vram_gb,
+        iteration=state.get("iteration", 0),
+        max_iterations=MAX_ITERATIONS,
+        recipe_bits=recipe.bits,
+        recipe_pruning=recipe.pruning_ratio,
+        layers_dropped=len(recipe.layers_to_drop),
+        actual_tps=metrics.actual_tps,
+        actual_accuracy=metrics.accuracy_score,
+        actual_vram=metrics.actual_vram_usage,
+        status="SUCCESS" if metrics.was_successful else f"FAILED: {metrics.error_log}",
+        history_summary="\n".join(history_lines) if history_lines else "No previous attempts",
+    )
+    
+    try:
+        log_transition("Critic", "[LLM] Evaluating optimization progress...", "critic.node")
+        
+        llm = get_critic_llm(state["llm_config"])
+        structured_llm = llm.with_structured_output(RoutingDecision)
+        
+        decision = structured_llm.invoke([
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Should we continue optimization or stop?"},
+        ])
+        
+        if decision.decision == "stop":
+            log_transition(
+                "Critic",
+                f"[LLM] STOP ({decision.confidence:.0%} confident): {decision.reasoning}",
+                "status.success" if decision.confidence > 0.7 else "status.warn",
+            )
+            return "reporter"
+        else:
+            log_transition(
+                "Critic",
+                f"[LLM] CONTINUE ({decision.confidence:.0%} confident): {decision.reasoning}",
+                "critic.node",
+            )
+            if decision.suggestion:
+                log_transition("Critic", f"[LLM] Suggestion: {decision.suggestion}", "critic.node")
+            return "architect"
+            
+    except Exception as e:
+        log_transition(
+            "Critic",
+            f"[LLM] Routing failed: {e}. Falling back to rules.",
+            "status.warn",
+        )
+        # Fallback to rule-based routing
+        return critic_router(state)
+
+
 def reporter_node(state: SintraState) -> dict:
     """
     The Archivist: Saves the winning recipe to a JSON file using Pydantic v2 standards.
