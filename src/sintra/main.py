@@ -17,8 +17,12 @@ from sintra.agents.nodes import (
     benchmarker_node,
     critic_node,
     critic_router,
+    critic_router_llm,
     reporter_node,
 )
+from sintra.agents.planner import planner_node
+from sintra.agents.react_architect import react_architect_node
+from sintra.agents.reflector import reflector_node
 from sintra.agents.state import SintraState
 from sintra.checkpoint import (
     find_latest_checkpoint,
@@ -35,29 +39,68 @@ from sintra.ui.console import console, log_transition
 from sintra.ui.progress import ConsoleProgressReporter, set_global_reporter
 
 
-def build_sintra_workflow():
+def build_sintra_workflow(
+    use_planner: bool = False,
+    use_react: bool = False,
+    use_reflection: bool = False,
+    use_llm_routing: bool = False,
+):
     workflow = StateGraph(SintraState)
 
-    # Define the "Actors"
-    workflow.add_node("architect", architect_node)
+    # Optional: Add planner for strategic optimization
+    if use_planner:
+        workflow.add_node("planner", planner_node)
+
+    # Define the "Actors" - choose architect based on mode
+    if use_react:
+        workflow.add_node("architect", react_architect_node)
+    else:
+        workflow.add_node("architect", architect_node)
+    
     workflow.add_node("benchmarker", benchmarker_node)
     workflow.add_node("critic", critic_node)
     workflow.add_node("reporter", reporter_node)
+    
+    # Optional: Add reflector for self-analysis
+    if use_reflection:
+        workflow.add_node("reflector", reflector_node)
 
     # Define the "Path"
-    workflow.set_entry_point("architect")
+    if use_planner:
+        workflow.set_entry_point("planner")
+        workflow.add_edge("planner", "architect")
+    else:
+        workflow.set_entry_point("architect")
+    
     workflow.add_edge("architect", "benchmarker")
     workflow.add_edge("benchmarker", "critic")
 
+    # Choose routing function
+    router_fn = critic_router_llm if use_llm_routing else critic_router
+
     # The Decision Point: Critic determines if we repeat or stop
-    workflow.add_conditional_edges(
-        "critic",
-        critic_router,
-        {
-            "architect": "architect",
-            "reporter": "reporter",
-        },
-    )
+    if use_reflection:
+        # With reflection: critic → reflector → architect (when continuing)
+        workflow.add_conditional_edges(
+            "critic",
+            router_fn,
+            {
+                "architect": "reflector",  # Go through reflector first
+                "reporter": "reporter",
+            },
+        )
+        workflow.add_edge("reflector", "architect")
+    else:
+        # Without reflection: critic → architect directly
+        workflow.add_conditional_edges(
+            "critic",
+            router_fn,
+            {
+                "architect": "architect",
+                "reporter": "reporter",
+            },
+        )
+    
     # reporter leads to END
     workflow.add_edge("reporter", END)
 
@@ -170,6 +213,7 @@ def main():
             ),
             "use_debug": args.debug,
             "use_mock": args.mock,
+            "use_react": getattr(args, 'react', False),
             "target_model_id": args.model_id,
             "run_id": run_id,
             "backend": args.backend,
@@ -179,21 +223,46 @@ def main():
             "current_recipe": None,
             "critic_feedback": "",
             "best_recipe": None,
+            "reasoning_chain": None,
+            "reasoning_summary": None,
+            "reflection": None,
+            "strategy_adjustments": None,
+            "optimization_plan": None,
         }
     else:
         # Update resumed state with current session settings
         initial_state["use_debug"] = args.debug
         initial_state["use_mock"] = args.mock
+        initial_state["use_react"] = getattr(args, 'react', False)
         initial_state["run_id"] = run_id
+
+    # Handle --agentic flag (enables all agentic features)
+    use_planner = getattr(args, 'plan', False) or getattr(args, 'agentic', False)
+    use_react = getattr(args, 'react', False) or getattr(args, 'agentic', False)
+    use_reflect = getattr(args, 'reflect', False) or getattr(args, 'agentic', False)
+    use_llm_routing = getattr(args, 'llm_routing', False) or getattr(args, 'agentic', False)
 
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
     )
+    if use_planner:
+        log_transition("System", "Planner agent enabled for strategy creation", "arch.node")
+    if use_react:
+        log_transition("System", "Using ReAct-style architect with tool use", "arch.node")
+    if use_reflect:
+        log_transition("System", "Self-reflection enabled for failure analysis", "critic.node")
+    if use_llm_routing:
+        log_transition("System", "Using LLM-based routing decisions", "critic.node")
     if not args.debug:
         log_transition("System", f"Optimizing: {args.model_id}", "hw.profile")
 
-    # Run Workflow
-    app = build_sintra_workflow()
+    # Run Workflow - use ReAct architect and reflection if flags are set
+    app = build_sintra_workflow(
+        use_planner=use_planner,
+        use_react=use_react,
+        use_reflection=use_reflect,
+        use_llm_routing=use_llm_routing,
+    )
 
     # Streaming the graph for real-time console updates
     final_state = None
