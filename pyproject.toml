@@ -72,6 +72,12 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests",
+    "slow: marks tests as slow (>10 seconds)",
+    "requires_model: marks tests that require model download",
+    "requires_llama_cpp: marks tests that require llama.cpp",
+]
 
 [tool.mypy]
 python_version = "3.12"
