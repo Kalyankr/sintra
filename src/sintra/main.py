@@ -157,15 +157,8 @@ def main():
         db.start_run(
             run_id=run_id,
             model_id=args.model_id,
-            hardware_profile=profile.name,
-            config={
-                "backend": args.backend,
-                "provider": args.provider,
-                "llm_model": args.model,
-                "max_iters": args.max_iters,
-                "target_tps": profile.targets.min_tokens_per_second,
-                "target_accuracy": profile.targets.min_accuracy_score,
-            },
+            profile=profile,
+            backend=args.backend,
         )
 
         # Initialize State (fresh run)
@@ -240,12 +233,14 @@ def main():
         
         db.finish_run(
             run_id=run_id,
+            final_iteration=current_iteration,
+            is_converged=True,
+            best_recipe=best_recipe["recipe"] if best_recipe else None,
             status="completed",
-            best_recipe=best_recipe["recipe"].model_dump() if best_recipe else None,
         )
         console.rule("[status.success] OPTIMIZATION COMPLETE")
     except MissingAPIKeyError as e:
-        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
+        db.finish_run(run_id=run_id, final_iteration=current_iteration, is_converged=False, status="failed")
         console.print(f"\n[bold red]✗ Missing API Key[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Setup:[/dim]")
@@ -256,7 +251,7 @@ def main():
         console.print("  3. Or export it: [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
         sys.exit(1)
     except LLMConnectionError as e:
-        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
+        db.finish_run(run_id=run_id, final_iteration=current_iteration, is_converged=False, status="failed")
         console.print(f"\n[bold red]✗ LLM Connection Failed[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Suggestions:[/dim]")
@@ -270,11 +265,11 @@ def main():
         )
         sys.exit(1)
     except KeyboardInterrupt:
-        db.finish_run(run_id=run_id, status="cancelled", best_recipe=None)
+        db.finish_run(run_id=run_id, final_iteration=current_iteration, is_converged=False, status="interrupted")
         console.print("\n[yellow]Optimization cancelled by user[/yellow]")
         sys.exit(130)
     except Exception as e:
-        db.finish_run(run_id=run_id, status="failed", best_recipe=None)
+        db.finish_run(run_id=run_id, final_iteration=current_iteration, is_converged=False, status="failed")
         # Catch-all for unexpected errors
         console.print(f"\n[bold red]✗ Unexpected Error[/bold red]")
         console.print(f"  {type(e).__name__}: {e}")

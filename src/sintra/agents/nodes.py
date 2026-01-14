@@ -325,15 +325,10 @@ def benchmarker_node(state: SintraState) -> StateUpdate:
             db.save_experiment(
                 run_id=run_id,
                 model_id=state["target_model_id"],
-                hardware_profile=profile.name,
-                recipe=recipe.model_dump(),
-                metrics={
-                    "actual_tps": result.actual_tps,
-                    "accuracy_score": result.accuracy_score,
-                    "peak_vram_gb": result.peak_vram_gb,
-                    "was_successful": result.was_successful,
-                },
-                backend=state.get("backend", "GGUF"),
+                hardware_name=profile.name,
+                recipe=recipe,
+                result=result,
+                backend=state.get("backend", "gguf"),
             )
         except Exception as e:
             log_transition(

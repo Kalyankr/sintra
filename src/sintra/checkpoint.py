@@ -54,7 +54,7 @@ def serialize_state(state: Dict[str, Any]) -> Dict[str, Any]:
                     "metrics": {
                         "actual_tps": value["metrics"].actual_tps,
                         "accuracy_score": value["metrics"].accuracy_score,
-                        "peak_vram_gb": value["metrics"].peak_vram_gb,
+                        "actual_vram_usage": value["metrics"].actual_vram_usage,
                         "was_successful": value["metrics"].was_successful,
                     } if hasattr(value["metrics"], "actual_tps") else value["metrics"],
                 }
@@ -69,7 +69,7 @@ def serialize_state(state: Dict[str, Any]) -> Dict[str, Any]:
                         "metrics": {
                             "actual_tps": entry["metrics"].actual_tps,
                             "accuracy_score": entry["metrics"].accuracy_score,
-                            "peak_vram_gb": entry["metrics"].peak_vram_gb,
+                            "actual_vram_usage": entry["metrics"].actual_vram_usage,
                             "was_successful": entry["metrics"].was_successful,
                         } if hasattr(entry["metrics"], "actual_tps") else entry["metrics"],
                     }
