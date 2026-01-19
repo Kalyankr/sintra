@@ -1,7 +1,5 @@
 """Tests for progress tracking module."""
 
-import pytest
-
 from sintra.ui.progress import (
     CallbackProgressReporter,
     ConsoleProgressReporter,

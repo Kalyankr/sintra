@@ -10,7 +10,6 @@ from sintra.persistence import (
     ExperimentRecord,
     HistoryDB,
     format_history_from_db,
-    get_history_db,
 )
 from sintra.profiles.models import (
     Constraints,
@@ -362,7 +361,6 @@ class TestFormatHistory:
         # Use the temp_db's path
         # Set up global DB to use temp
         import sintra.persistence as persistence_module
-        from sintra.persistence import _global_db, get_history_db
 
         persistence_module._global_db = temp_db
 

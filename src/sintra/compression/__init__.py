@@ -13,7 +13,13 @@ Advanced backends (optional):
 """
 
 from .downloader import ModelDownloader, download_model
-from .evaluator import AccuracyEvaluator, evaluate_perplexity
+from .evaluator import (
+    AccuracyComparison,
+    AccuracyEvaluator,
+    compare_accuracy,
+    evaluate_perplexity,
+    evaluate_with_baseline,
+)
 from .pruner import (
     LayerDropper,
     PruningError,

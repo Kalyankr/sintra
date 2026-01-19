@@ -35,7 +35,6 @@ from sintra.persistence import get_history_db
 from sintra.profiles.hardware import (
     auto_detect_hardware,
     print_hardware_info,
-    save_profile_to_yaml,
 )
 from sintra.profiles.models import LLMConfig, LLMProvider
 from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
@@ -163,6 +162,8 @@ def main():
     os.environ["SINTRA_REAL_COMPRESSION"] = "true"
     os.environ["SINTRA_MODEL_ID"] = args.model_id
     os.environ["SINTRA_BACKEND"] = args.backend
+    os.environ["SINTRA_USE_BASELINE"] = "true" if args.baseline else "false"
+    os.environ["SINTRA_SKIP_ACCURACY"] = "true" if args.skip_accuracy else "false"
     if args.hf_token:
         os.environ["HF_TOKEN"] = args.hf_token
 
@@ -340,7 +341,7 @@ def main():
             is_converged=False,
             status="failed",
         )
-        console.print(f"\n[bold red]✗ Missing API Key[/bold red]")
+        console.print("\n[bold red]✗ Missing API Key[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Setup:[/dim]")
         console.print(
@@ -356,7 +357,7 @@ def main():
             is_converged=False,
             status="failed",
         )
-        console.print(f"\n[bold red]✗ LLM Connection Failed[/bold red]")
+        console.print("\n[bold red]✗ LLM Connection Failed[/bold red]")
         console.print(f"  {e}")
         console.print("\n[dim]Suggestions:[/dim]")
         if args.provider == "ollama":
@@ -385,7 +386,7 @@ def main():
             status="failed",
         )
         # Catch-all for unexpected errors
-        console.print(f"\n[bold red]✗ Unexpected Error[/bold red]")
+        console.print("\n[bold red]✗ Unexpected Error[/bold red]")
         console.print(f"  {type(e).__name__}: {e}")
         console.print("\n[dim]This might be a bug. Please report it with:[/dim]")
         console.print("  • The command you ran")
@@ -402,7 +403,6 @@ def main():
 
 def _run_dry_mode(args, profile, output_dir: Path) -> None:
     """Execute dry-run mode: show what would happen without running compression."""
-    from sintra.profiles.models import HardwareProfile
 
     console.print("\n[bold yellow]🔍 DRY RUN MODE[/bold yellow]")
     console.print("[dim]No actual compression will be performed.[/dim]\n")
@@ -507,7 +507,9 @@ def _list_checkpoints() -> None:
     console.print("[dim]Or resume latest: sintra --resume --auto-detect[/dim]")
 
 
-def _load_resume_checkpoint(resume_arg: str, model_id: str = None) -> dict | None:
+def _load_resume_checkpoint(
+    resume_arg: str, model_id: str | None = None
+) -> dict | None:
     """Load checkpoint for resume.
 
     Args:

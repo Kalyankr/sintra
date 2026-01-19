@@ -5,9 +5,9 @@ compression, quantization, and other long-running operations.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Optional
 
 
 class ProgressStage(str, Enum):
@@ -166,10 +166,10 @@ class CallbackProgressReporter(ProgressReporter):
 
 
 # Global progress reporter (can be set by CLI/main)
-_global_reporter: Optional[ProgressReporter] = None
+_global_reporter: ProgressReporter | None = None
 
 
-def set_global_reporter(reporter: Optional[ProgressReporter]) -> None:
+def set_global_reporter(reporter: ProgressReporter | None) -> None:
     """Set the global progress reporter."""
     global _global_reporter
     _global_reporter = reporter

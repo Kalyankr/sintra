@@ -2,16 +2,45 @@
 
 Measures model quality by calculating perplexity on a test dataset.
 Lower perplexity = better model quality.
+
+Supports baseline comparison between original and optimized models.
 """
 
 import logging
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AccuracyComparison:
+    """Result of comparing original vs optimized model accuracy."""
+
+    original_accuracy: float
+    optimized_accuracy: float
+    accuracy_loss: float
+    retention_rate: float  # optimized / original (e.g., 0.95 = 95% retained)
+    original_model: str
+    optimized_model: str
+
+    @property
+    def retention_percent(self) -> float:
+        """Retention rate as percentage."""
+        return self.retention_rate * 100
+
+    def __str__(self) -> str:
+        return (
+            f"Accuracy Comparison:\n"
+            f"  Original:  {self.original_accuracy:.2%}\n"
+            f"  Optimized: {self.optimized_accuracy:.2%}\n"
+            f"  Retention: {self.retention_percent:.1f}%\n"
+            f"  Loss:      {self.accuracy_loss:.2%}"
+        )
+
 
 # Sample text for quick perplexity evaluation
 # From WikiText-2 test set (public domain)
@@ -66,7 +95,7 @@ class AccuracyEvaluator:
 
     def __init__(
         self,
-        eval_text: Optional[str] = None,
+        eval_text: str | None = None,
         n_ctx: int = 512,
         n_threads: int = 4,
     ):
@@ -280,3 +309,109 @@ def evaluate_perplexity(
     if quick:
         return evaluator.evaluate_quick(model_path)
     return evaluator.evaluate(model_path)
+
+
+def compare_accuracy(
+    original_model_path: Path,
+    optimized_model_path: Path,
+    quick: bool = True,
+) -> AccuracyComparison:
+    """Compare accuracy between original and optimized models.
+
+    This is the key function for measuring compression quality.
+    It evaluates both models with the same tests and returns
+    a comparison showing how much accuracy was retained.
+
+    Args:
+        original_model_path: Path to original (uncompressed) GGUF model
+        optimized_model_path: Path to optimized (compressed) GGUF model
+        quick: Use quick evaluation (faster, less accurate)
+
+    Returns:
+        AccuracyComparison with retention rate and loss metrics
+
+    Example:
+        >>> result = compare_accuracy(
+        ...     Path("/models/llama-7b-f16.gguf"),
+        ...     Path("/models/llama-7b-q4_k_m.gguf"),
+        ... )
+        >>> print(f"Retained {result.retention_percent:.1f}% accuracy")
+        Retained 94.5% accuracy
+    """
+    evaluator = AccuracyEvaluator()
+
+    logger.info(f"Evaluating original model: {original_model_path.name}")
+    if quick:
+        original_score = evaluator.evaluate_quick(original_model_path)
+    else:
+        original_score = evaluator.evaluate(original_model_path)
+
+    logger.info(f"Evaluating optimized model: {optimized_model_path.name}")
+    if quick:
+        optimized_score = evaluator.evaluate_quick(optimized_model_path)
+    else:
+        optimized_score = evaluator.evaluate(optimized_model_path)
+
+    # Calculate metrics
+    accuracy_loss = original_score - optimized_score
+    retention_rate = optimized_score / original_score if original_score > 0 else 0.0
+
+    comparison = AccuracyComparison(
+        original_accuracy=original_score,
+        optimized_accuracy=optimized_score,
+        accuracy_loss=accuracy_loss,
+        retention_rate=retention_rate,
+        original_model=str(original_model_path),
+        optimized_model=str(optimized_model_path),
+    )
+
+    logger.info(f"Accuracy comparison: {comparison.retention_percent:.1f}% retained")
+    return comparison
+
+
+def evaluate_with_baseline(
+    optimized_model_path: Path,
+    model_id: str,
+    cache_dir: Path | None = None,
+    quick: bool = True,
+) -> AccuracyComparison:
+    """Evaluate optimized model against baseline from HuggingFace.
+
+    Downloads the original model, converts to GGUF F16, and compares.
+    This is the recommended way to measure compression quality.
+
+    Args:
+        optimized_model_path: Path to the optimized GGUF model
+        model_id: HuggingFace model ID (e.g., "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+        cache_dir: Directory for caching baseline model
+        quick: Use quick evaluation
+
+    Returns:
+        AccuracyComparison with retention metrics
+    """
+    from sintra.compression.downloader import download_model
+    from sintra.compression.quantizer import GGUFQuantizer
+
+    cache_dir = cache_dir or Path.home() / ".cache" / "sintra" / "baselines"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a safe filename from model_id
+    safe_name = model_id.replace("/", "_").replace("\\", "_")
+    baseline_gguf = cache_dir / f"{safe_name}-f16.gguf"
+
+    # Download and convert to F16 GGUF if not cached
+    if not baseline_gguf.exists():
+        logger.info(f"Downloading baseline model: {model_id}")
+        model_path = download_model(model_id, cache_dir / "hf_models")
+
+        logger.info("Converting baseline to GGUF F16...")
+        quantizer = GGUFQuantizer(cache_dir=cache_dir)
+        baseline_gguf = quantizer.convert_to_gguf(
+            model_path=model_path,
+            output_name=safe_name,
+            output_type="f16",
+        )
+    else:
+        logger.info(f"Using cached baseline: {baseline_gguf}")
+
+    return compare_accuracy(baseline_gguf, optimized_model_path, quick=quick)

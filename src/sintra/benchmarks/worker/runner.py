@@ -14,7 +14,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import psutil
 from llama_cpp import Llama
@@ -31,7 +30,7 @@ def download_and_quantize(
     model_id: str,
     bits: int,
     pruning_ratio: float = 0.0,
-    layers_to_drop: Optional[list[int]] = None,
+    layers_to_drop: list[int] | None = None,
 ) -> str:
     """Download a model and quantize it with optional compression.
 
@@ -177,6 +176,46 @@ def evaluate_accuracy(model_path: str) -> float:
         return 0.85  # Fallback estimate
 
 
+def evaluate_accuracy_with_baseline(
+    optimized_model_path: str,
+    model_id: str,
+) -> tuple[float, float, float]:
+    """Evaluate accuracy compared to baseline original model.
+
+    Downloads the original model and compares accuracy retention.
+
+    Args:
+        optimized_model_path: Path to the optimized GGUF model
+        model_id: HuggingFace model ID for baseline
+
+    Returns:
+        Tuple of (optimized_accuracy, retention_rate, accuracy_loss)
+    """
+    try:
+        from sintra.compression.evaluator import evaluate_with_baseline
+
+        sys.stderr.write(f"Worker: Comparing accuracy against baseline {model_id}...\n")
+        comparison = evaluate_with_baseline(
+            optimized_model_path=Path(optimized_model_path),
+            model_id=model_id,
+            quick=True,
+        )
+        sys.stderr.write(
+            f"Worker: Baseline comparison complete - "
+            f"{comparison.retention_percent:.1f}% accuracy retained\n"
+        )
+        return (
+            comparison.optimized_accuracy,
+            comparison.retention_rate,
+            comparison.accuracy_loss,
+        )
+    except Exception as e:
+        sys.stderr.write(f"Worker: Baseline comparison failed: {e}\n")
+        # Fall back to simple evaluation
+        accuracy = evaluate_accuracy(optimized_model_path)
+        return accuracy, 1.0, 0.0  # Assume 100% retention if baseline fails
+
+
 def run_transformers_benchmark(
     model_path: str,
     backend: str,
@@ -283,18 +322,23 @@ def run_transformers_benchmark(
             actual_vram_usage=0,
             accuracy_score=0,
             was_successful=False,
-            error_log=f"Benchmark failed: {str(e)}",
+            error_log=f"Benchmark failed: {e!s}",
         )
 
 
 def run_benchmark(
-    model_path: str, evaluate_accuracy_flag: bool = True
+    model_path: str,
+    evaluate_accuracy_flag: bool = True,
+    model_id: str | None = None,
+    use_baseline: bool = False,
 ) -> ExperimentResult:
     """Run benchmark on a GGUF model.
 
     Args:
         model_path: Path to the GGUF model file
         evaluate_accuracy_flag: Whether to run accuracy evaluation
+        model_id: HuggingFace model ID for baseline comparison
+        use_baseline: Whether to compare against baseline original model
 
     Returns:
         ExperimentResult with measured metrics
@@ -338,15 +382,29 @@ def run_benchmark(
     peak_mem = process.memory_info().rss
     actual_vram = peak_mem / (1024**3)
 
-    # Accuracy (optional, adds latency)
-    if evaluate_accuracy_flag:
-        sys.stderr.write("Worker: Evaluating accuracy...\n")
-        accuracy = evaluate_accuracy(model_path)
-    else:
-        accuracy = 0.85  # Estimate
+    # Accuracy evaluation
+    accuracy = 0.85  # Default estimate
+    retention_rate = None
+    accuracy_loss = None
 
+    if evaluate_accuracy_flag:
+        if use_baseline and model_id:
+            # Full baseline comparison
+            sys.stderr.write(
+                "Worker: Evaluating accuracy with baseline comparison...\n"
+            )
+            accuracy, retention_rate, accuracy_loss = evaluate_accuracy_with_baseline(
+                model_path, model_id
+            )
+        else:
+            # Simple accuracy evaluation
+            sys.stderr.write("Worker: Evaluating accuracy...\n")
+            accuracy = evaluate_accuracy(model_path)
+
+    retention_str = f", Retention={retention_rate:.1%}" if retention_rate else ""
     sys.stderr.write(
-        f"Worker: TPS={actual_tps:.2f}, VRAM={actual_vram:.2f}GB, Acc={accuracy:.2f}\n"
+        f"Worker: TPS={actual_tps:.2f}, VRAM={actual_vram:.2f}GB, "
+        f"Acc={accuracy:.2f}{retention_str}\n"
     )
 
     return ExperimentResult(
@@ -355,6 +413,8 @@ def run_benchmark(
         accuracy_score=round(accuracy, 2),
         was_successful=True,
         error_log="",
+        accuracy_retention=round(retention_rate, 4) if retention_rate else None,
+        accuracy_loss=round(accuracy_loss, 4) if accuracy_loss else None,
     )
 
 
@@ -396,7 +456,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
             f"backend={backend}\n"
         )
 
-        model_path: Optional[str] = None
+        model_path: str | None = None
 
         # Route to appropriate backend
         if backend == "bnb":
@@ -430,7 +490,20 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
         if backend in ("bnb", "onnx"):
             return run_transformers_benchmark(model_path, backend)
         else:
-            return run_benchmark(model_path, evaluate_accuracy_flag=True)
+            # Check evaluation settings from environment
+            use_baseline = (
+                os.environ.get("SINTRA_USE_BASELINE", "false").lower() == "true"
+            )
+            skip_accuracy = (
+                os.environ.get("SINTRA_SKIP_ACCURACY", "false").lower() == "true"
+            )
+
+            return run_benchmark(
+                model_path,
+                evaluate_accuracy_flag=not skip_accuracy,
+                model_id=model_id,
+                use_baseline=use_baseline,
+            )
 
     except Exception as e:
         return ExperimentResult(
@@ -438,7 +511,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
             actual_vram_usage=0,
             accuracy_score=0,
             was_successful=False,
-            error_log=f"Surgery failed: {str(e)}",
+            error_log=f"Surgery failed: {e!s}",
         )
 
 
@@ -470,7 +543,7 @@ def main():
         sys.stderr.write(f"Worker: Invalid JSON input: {e}\n")
         sys.exit(1)
     except Exception as e:
-        sys.stderr.write(f"Worker Crash: {str(e)}\n")
+        sys.stderr.write(f"Worker Crash: {e!s}\n")
         sys.exit(1)
 
 

@@ -1,10 +1,7 @@
 """Tests for hardware auto-detection module."""
 
-import platform
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from sintra.profiles.hardware import (
     auto_detect_hardware,

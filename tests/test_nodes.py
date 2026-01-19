@@ -1,7 +1,5 @@
 """Tests for agent node functions."""
 
-from typing import Dict, Union
-
 import pytest
 
 from sintra.agents.nodes import (

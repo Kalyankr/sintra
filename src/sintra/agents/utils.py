@@ -3,15 +3,15 @@
 Handles string formatting, telemetry parsing, and log cleaning.
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from sintra.profiles.models import ExperimentResult, ModelRecipe
 
 # Type alias for history entries
-HistoryEntry = Dict[str, Union[ModelRecipe, ExperimentResult]]
+HistoryEntry = dict[str, ModelRecipe | ExperimentResult]
 
 
-def format_history_for_llm(history: List[HistoryEntry]) -> str:
+def format_history_for_llm(history: list[HistoryEntry]) -> str:
     """Narrates the experiment history for LLM reasoning.
 
     Formats the relationship between recipes and hardware performance
@@ -49,7 +49,7 @@ def format_history_for_llm(history: List[HistoryEntry]) -> str:
 
 
 def is_duplicate_recipe(
-    recipe: ModelRecipe, history: List[HistoryEntry], tolerance: float = 0.05
+    recipe: ModelRecipe, history: list[HistoryEntry], tolerance: float = 0.05
 ) -> bool:
     """Check if a recipe is essentially a duplicate of one already tried.
 
@@ -85,7 +85,7 @@ def is_duplicate_recipe(
     return False
 
 
-def get_untried_variations(history: List[HistoryEntry]) -> Dict[str, Any]:
+def get_untried_variations(history: list[HistoryEntry]) -> dict[str, Any]:
     """Suggest recipe variations that haven't been tried yet.
 
     Analyzes history to find gaps in the search space.

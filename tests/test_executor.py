@@ -5,7 +5,6 @@ import pytest
 from sintra.benchmarks.executor import BenchmarkExecutor, MockExecutor
 from sintra.profiles.models import (
     Constraints,
-    ExperimentResult,
     HardwareProfile,
     ModelRecipe,
     Targets,

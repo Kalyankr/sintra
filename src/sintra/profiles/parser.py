@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Union
 
 import yaml
 from pydantic import ValidationError
@@ -16,7 +15,7 @@ class ProfileLoadError(Exception):
     pass
 
 
-def load_hardware_profile(file_path: Union[str, Path]) -> HardwareProfile:
+def load_hardware_profile(file_path: str | Path) -> HardwareProfile:
     """Loads and validates a hardware profile from a YAML file.
 
     Args:
@@ -37,7 +36,7 @@ def load_hardware_profile(file_path: Union[str, Path]) -> HardwareProfile:
         raise ProfileLoadError(f"Profile path is not a file: {path}")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ProfileLoadError(f"Invalid YAML in profile file: {e}") from e

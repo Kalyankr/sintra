@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import psutil
 import torch
@@ -20,7 +20,7 @@ class SintraRunner:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def apply_surgery(self, bits: int, layers_to_drop: List[int]) -> Any:
+    def apply_surgery(self, bits: int, layers_to_drop: list[int]) -> Any:
         """Loads model and applies quantization/pruning instructions."""
         # Load with Quantization (bitsandbytes integration)
         model = AutoModelForCausalLM.from_pretrained(
@@ -47,7 +47,7 @@ class SintraRunner:
 
         return model
 
-    def run_performance_test(self, model) -> Dict[str, float]:
+    def run_performance_test(self, model) -> dict[str, float]:
         """Measures Tokens Per Second (TPS) and Memory Usage."""
         prompt = "The key to efficient machine learning is"
         inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)

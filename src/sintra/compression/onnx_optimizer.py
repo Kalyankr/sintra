@@ -21,7 +21,6 @@ import json
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class OptimizationLevel(str, Enum):
@@ -84,7 +83,7 @@ class ONNXOptimizer:
 
     def __init__(
         self,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         optimization_level: OptimizationLevel = OptimizationLevel.ALL,
     ):
         """Initialize the optimizer.
@@ -109,7 +108,7 @@ class ONNXOptimizer:
         self,
         model_id_or_path: str,
         task: str = "text-generation",
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
         opset: int = 17,
     ) -> Path:
         """Export a model to ONNX format.
@@ -171,8 +170,8 @@ class ONNXOptimizer:
     def optimize(
         self,
         model_path: Path,
-        optimization_level: Optional[OptimizationLevel] = None,
-        output_name: Optional[str] = None,
+        optimization_level: OptimizationLevel | None = None,
+        output_name: str | None = None,
     ) -> Path:
         """Apply graph optimizations to an ONNX model.
 
@@ -225,7 +224,7 @@ class ONNXOptimizer:
         self,
         model_path: Path,
         mode: QuantizationMode = QuantizationMode.DYNAMIC,
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
     ) -> Path:
         """Apply INT8 quantization to an ONNX model.
 
@@ -286,7 +285,7 @@ class ONNXOptimizer:
         model_id_or_path: str,
         task: str = "text-generation",
         apply_quantization: bool = False,
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
     ) -> Path:
         """Export, optimize, and optionally quantize in one step.
 

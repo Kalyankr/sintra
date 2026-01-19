@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -21,21 +20,21 @@ class LLMConfig(BaseModel):
 # Hardware & Target Definitions
 class Constraints(BaseModel):
     vram_gb: float
-    cpu_arch: Optional[str] = None
+    cpu_arch: str | None = None
     has_cuda: bool = False
 
 
 class Targets(BaseModel):
     min_tokens_per_second: float
     min_accuracy_score: float
-    max_latency_ms: Optional[float] = None
+    max_latency_ms: float | None = None
 
 
 class HardwareProfile(BaseModel):
     name: str
     constraints: Constraints
     targets: Targets
-    supported_quantizations: Optional[List[str]] = None
+    supported_quantizations: list[str] | None = None
 
 
 # Surgery & Results
@@ -44,7 +43,7 @@ class ModelRecipe(BaseModel):
 
     bits: int = Field(4, ge=2, le=8)
     pruning_ratio: float = Field(0.0, ge=0.0, le=1.0)
-    layers_to_drop: List[int] = Field(
+    layers_to_drop: list[int] = Field(
         default_factory=list, description="Indices of layers to prune."
     )
     method: str = Field("GGUF")
@@ -63,4 +62,7 @@ class ExperimentResult(BaseModel):
     actual_vram_usage: float
     accuracy_score: float
     was_successful: bool
-    error_log: Optional[str] = None
+    error_log: str | None = None
+    # Baseline comparison fields (optional, may not be present in older data)
+    accuracy_retention: float | None = None  # e.g., 0.95 = 95% of original accuracy
+    accuracy_loss: float | None = None  # e.g., 0.05 = 5% loss vs original

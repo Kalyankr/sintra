@@ -4,10 +4,8 @@ from typing import get_type_hints
 
 from sintra.agents.state import SintraState
 from sintra.profiles.models import (
-    ExperimentResult,
     HardwareProfile,
     LLMConfig,
-    ModelRecipe,
 )
 
 
