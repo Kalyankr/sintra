@@ -149,6 +149,19 @@ def parse_args() -> argparse.Namespace:
         help="Use rule-based routing instead of LLM",
     )
 
+    # Evaluation Settings
+    group_eval = parser.add_argument_group("Evaluation Settings")
+    group_eval.add_argument(
+        "--baseline",
+        action="store_true",
+        help="Compare accuracy against original (uncompressed) model",
+    )
+    group_eval.add_argument(
+        "--skip-accuracy",
+        action="store_true",
+        help="Skip accuracy evaluation for faster runs",
+    )
+
     # Debug Mode
     group_debug = parser.add_argument_group("Debugging")
     group_debug.add_argument(

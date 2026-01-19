@@ -163,6 +163,8 @@ def main():
     os.environ["SINTRA_REAL_COMPRESSION"] = "true"
     os.environ["SINTRA_MODEL_ID"] = args.model_id
     os.environ["SINTRA_BACKEND"] = args.backend
+    os.environ["SINTRA_USE_BASELINE"] = "true" if args.baseline else "false"
+    os.environ["SINTRA_SKIP_ACCURACY"] = "true" if args.skip_accuracy else "false"
     if args.hf_token:
         os.environ["HF_TOKEN"] = args.hf_token
 

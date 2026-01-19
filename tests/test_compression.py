@@ -11,8 +11,10 @@ from sintra.compression.downloader import (
     ModelDownloader,
 )
 from sintra.compression.evaluator import (
+    AccuracyComparison,
     AccuracyEvaluator,
     EvaluationError,
+    compare_accuracy,
 )
 from sintra.compression.quantizer import (
     BITS_TO_QUANT,
@@ -20,6 +22,107 @@ from sintra.compression.quantizer import (
     QuantizationError,
     QuantizationType,
 )
+
+
+class TestAccuracyComparison:
+    """Tests for AccuracyComparison dataclass."""
+
+    def test_retention_percent(self) -> None:
+        """Test retention_percent property."""
+        comparison = AccuracyComparison(
+            original_accuracy=0.90,
+            optimized_accuracy=0.85,
+            accuracy_loss=0.05,
+            retention_rate=0.944,
+            original_model="/path/to/original.gguf",
+            optimized_model="/path/to/optimized.gguf",
+        )
+        assert abs(comparison.retention_percent - 94.4) < 0.1
+
+    def test_str_representation(self) -> None:
+        """Test string representation."""
+        comparison = AccuracyComparison(
+            original_accuracy=0.90,
+            optimized_accuracy=0.85,
+            accuracy_loss=0.05,
+            retention_rate=0.944,
+            original_model="/path/to/original.gguf",
+            optimized_model="/path/to/optimized.gguf",
+        )
+        result = str(comparison)
+        assert "Original:" in result
+        assert "Optimized:" in result
+        assert "Retention:" in result
+        assert "Loss:" in result
+
+    def test_high_retention(self) -> None:
+        """Test comparison with high accuracy retention."""
+        comparison = AccuracyComparison(
+            original_accuracy=0.88,
+            optimized_accuracy=0.86,
+            accuracy_loss=0.02,
+            retention_rate=0.977,
+            original_model="original.gguf",
+            optimized_model="optimized.gguf",
+        )
+        assert comparison.retention_percent > 97.0
+        assert comparison.accuracy_loss < 0.03
+
+    def test_low_retention(self) -> None:
+        """Test comparison with low accuracy retention."""
+        comparison = AccuracyComparison(
+            original_accuracy=0.90,
+            optimized_accuracy=0.60,
+            accuracy_loss=0.30,
+            retention_rate=0.667,
+            original_model="original.gguf",
+            optimized_model="optimized.gguf",
+        )
+        assert comparison.retention_percent < 70.0
+        assert comparison.accuracy_loss > 0.25
+
+
+class TestCompareAccuracy:
+    """Tests for compare_accuracy function."""
+
+    @patch("sintra.compression.evaluator.AccuracyEvaluator")
+    def test_compare_accuracy_quick(self, mock_evaluator_class: MagicMock, tmp_path: Path) -> None:
+        """Test compare_accuracy with quick mode."""
+        # Create mock model files
+        original = tmp_path / "original.gguf"
+        optimized = tmp_path / "optimized.gguf"
+        original.touch()
+        optimized.touch()
+
+        # Mock evaluator returns different scores
+        mock_evaluator = MagicMock()
+        mock_evaluator.evaluate_quick.side_effect = [0.90, 0.85]
+        mock_evaluator_class.return_value = mock_evaluator
+
+        result = compare_accuracy(original, optimized, quick=True)
+
+        assert result.original_accuracy == 0.90
+        assert result.optimized_accuracy == 0.85
+        assert abs(result.accuracy_loss - 0.05) < 0.001
+        assert abs(result.retention_rate - 0.944) < 0.01
+
+    @patch("sintra.compression.evaluator.AccuracyEvaluator")
+    def test_compare_accuracy_full(self, mock_evaluator_class: MagicMock, tmp_path: Path) -> None:
+        """Test compare_accuracy with full evaluation."""
+        original = tmp_path / "original.gguf"
+        optimized = tmp_path / "optimized.gguf"
+        original.touch()
+        optimized.touch()
+
+        mock_evaluator = MagicMock()
+        mock_evaluator.evaluate.side_effect = [0.88, 0.80]
+        mock_evaluator_class.return_value = mock_evaluator
+
+        result = compare_accuracy(original, optimized, quick=False)
+
+        assert result.original_accuracy == 0.88
+        assert result.optimized_accuracy == 0.80
+        assert mock_evaluator.evaluate.call_count == 2
 
 
 class TestModelDownloader:

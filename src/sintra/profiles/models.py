@@ -64,3 +64,6 @@ class ExperimentResult(BaseModel):
     accuracy_score: float
     was_successful: bool
     error_log: Optional[str] = None
+    # Baseline comparison fields (optional, may not be present in older data)
+    accuracy_retention: Optional[float] = None  # e.g., 0.95 = 95% of original accuracy
+    accuracy_loss: Optional[float] = None  # e.g., 0.05 = 5% loss vs original
