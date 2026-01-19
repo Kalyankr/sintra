@@ -86,7 +86,9 @@ class TestCompareAccuracy:
     """Tests for compare_accuracy function."""
 
     @patch("sintra.compression.evaluator.AccuracyEvaluator")
-    def test_compare_accuracy_quick(self, mock_evaluator_class: MagicMock, tmp_path: Path) -> None:
+    def test_compare_accuracy_quick(
+        self, mock_evaluator_class: MagicMock, tmp_path: Path
+    ) -> None:
         """Test compare_accuracy with quick mode."""
         # Create mock model files
         original = tmp_path / "original.gguf"
@@ -107,7 +109,9 @@ class TestCompareAccuracy:
         assert abs(result.retention_rate - 0.944) < 0.01
 
     @patch("sintra.compression.evaluator.AccuracyEvaluator")
-    def test_compare_accuracy_full(self, mock_evaluator_class: MagicMock, tmp_path: Path) -> None:
+    def test_compare_accuracy_full(
+        self, mock_evaluator_class: MagicMock, tmp_path: Path
+    ) -> None:
         """Test compare_accuracy with full evaluation."""
         original = tmp_path / "original.gguf"
         optimized = tmp_path / "optimized.gguf"

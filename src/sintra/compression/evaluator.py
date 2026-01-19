@@ -42,6 +42,7 @@ class AccuracyComparison:
             f"  Loss:      {self.accuracy_loss:.2%}"
         )
 
+
 # Sample text for quick perplexity evaluation
 # From WikiText-2 test set (public domain)
 EVAL_TEXT = """

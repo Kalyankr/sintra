@@ -391,7 +391,9 @@ def run_benchmark(
     if evaluate_accuracy_flag:
         if use_baseline and model_id:
             # Full baseline comparison
-            sys.stderr.write("Worker: Evaluating accuracy with baseline comparison...\n")
+            sys.stderr.write(
+                "Worker: Evaluating accuracy with baseline comparison...\n"
+            )
             accuracy, retention_rate, accuracy_loss = evaluate_accuracy_with_baseline(
                 model_path, model_id
             )
@@ -490,9 +492,13 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
             return run_transformers_benchmark(model_path, backend)
         else:
             # Check evaluation settings from environment
-            use_baseline = os.environ.get("SINTRA_USE_BASELINE", "false").lower() == "true"
-            skip_accuracy = os.environ.get("SINTRA_SKIP_ACCURACY", "false").lower() == "true"
-            
+            use_baseline = (
+                os.environ.get("SINTRA_USE_BASELINE", "false").lower() == "true"
+            )
+            skip_accuracy = (
+                os.environ.get("SINTRA_SKIP_ACCURACY", "false").lower() == "true"
+            )
+
             return run_benchmark(
                 model_path,
                 evaluate_accuracy_flag=not skip_accuracy,
