@@ -1,6 +1,5 @@
 """Tests for progress tracking module."""
 
-
 from sintra.ui.progress import (
     CallbackProgressReporter,
     ConsoleProgressReporter,

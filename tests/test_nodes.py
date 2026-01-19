@@ -1,6 +1,5 @@
 """Tests for agent node functions."""
 
-
 import pytest
 
 from sintra.agents.nodes import (

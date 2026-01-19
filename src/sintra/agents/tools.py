@@ -179,7 +179,7 @@ def _estimate_parameters(
     embed_params = vocab_size * hidden_size * 2  # input + output embeddings
 
     # Per-layer parameters (attention + MLP)
-    head_dim = hidden_size // num_heads
+    _head_dim = hidden_size // num_heads  # noqa: F841  # Kept for documentation
     attn_params = 4 * hidden_size * hidden_size  # Q, K, V, O projections
     mlp_params = 3 * hidden_size * (4 * hidden_size)  # up, gate, down (for LLaMA-style)
     layer_params = attn_params + mlp_params

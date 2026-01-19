@@ -507,7 +507,9 @@ def _list_checkpoints() -> None:
     console.print("[dim]Or resume latest: sintra --resume --auto-detect[/dim]")
 
 
-def _load_resume_checkpoint(resume_arg: str, model_id: str = None) -> dict | None:
+def _load_resume_checkpoint(
+    resume_arg: str, model_id: str | None = None
+) -> dict | None:
     """Load checkpoint for resume.
 
     Args:

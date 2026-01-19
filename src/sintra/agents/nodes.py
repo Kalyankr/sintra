@@ -249,7 +249,6 @@ def architect_node(state: SintraState) -> StateUpdate:
     # DUPLICATE DETECTION: Prevent running the same experiment twice
     max_retries = 3
     retry_count = 0
-    original_recipe = new_recipe
 
     while is_duplicate_recipe(new_recipe, history) and retry_count < max_retries:
         retry_count += 1

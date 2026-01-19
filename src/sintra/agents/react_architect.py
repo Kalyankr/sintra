@@ -40,9 +40,7 @@ class ReActStep(BaseModel):
     tool_input: dict[str, Any] | None = Field(
         default=None, description="Input for tool"
     )
-    observation: str | None = Field(
-        default=None, description="Result from tool call"
-    )
+    observation: str | None = Field(default=None, description="Result from tool call")
 
 
 class ArchitectReasoning(BaseModel):

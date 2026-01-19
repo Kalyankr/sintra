@@ -1,6 +1,5 @@
 """Tests for the Sintra agent tools."""
 
-
 from sintra.agents.tools import (
     estimate_compression_impact,
     get_architect_tools,

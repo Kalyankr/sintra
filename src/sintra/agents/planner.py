@@ -380,7 +380,9 @@ def _estimate_model_size(model_id: str) -> str:
         if any(x in model_lower for x in ["1.3b", "1.1b"]):
             return "1B"
         return "3B"
-    elif any(x in model_lower for x in ["1b", "1.1b", "1.3b"]) or any(x in model_lower for x in ["tiny", "small", "mini"]):
+    elif any(x in model_lower for x in ["1b", "1.1b", "1.3b"]) or any(
+        x in model_lower for x in ["tiny", "small", "mini"]
+    ):
         return "1B"
     else:
         return "Unknown"

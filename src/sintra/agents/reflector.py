@@ -251,7 +251,7 @@ def _analyze_history(history: list[dict], profile, state: SintraState) -> Reflec
 
     for entry in history:
         metrics = entry["metrics"]
-        recipe = entry["recipe"]
+        # recipe = entry["recipe"]  # Available if needed for analysis
 
         if not metrics.was_successful:
             failures.append(

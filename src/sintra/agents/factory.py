@@ -1,5 +1,5 @@
 import os
-from typing import Union
+from typing import TYPE_CHECKING, Union
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
@@ -7,6 +7,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from sintra.profiles.models import LLMConfig, LLMProvider, ModelRecipe
+
+if TYPE_CHECKING:
+    from langchain_ollama import ChatOllama
 
 # Type alias for LLM with structured output
 StructuredLLM = Union[ChatOpenAI, ChatAnthropic, ChatGoogleGenerativeAI, "ChatOllama"]

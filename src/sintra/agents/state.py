@@ -29,9 +29,7 @@ class SintraState(TypedDict):
     current_recipe: ModelRecipe | None
 
     # History (Annotated with operator.add, results append automatically)
-    history: Annotated[
-        list[dict[str, ModelRecipe | ExperimentResult]], operator.add
-    ]
+    history: Annotated[list[dict[str, ModelRecipe | ExperimentResult]], operator.add]
     # critic feedback
     critic_feedback: str
     # best recipe (dict with 'recipe' and 'metrics' keys)
