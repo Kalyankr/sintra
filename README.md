@@ -17,7 +17,9 @@
 
 ## 🎬 Demo
 
-[![asciicast](https://asciinema.org/a/XhbhTWJilEakysXB.svg)](https://asciinema.org/a/XhbhTWJilEakysXB)
+<p align="center">
+  <img src="assets/sintra_demo.gif" alt="Sintra Demo" width="700">
+</p>
 
 ---
 
