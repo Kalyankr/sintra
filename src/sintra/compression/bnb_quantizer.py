@@ -20,7 +20,6 @@ import json
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 import torch
 
@@ -73,7 +72,7 @@ class BitsAndBytesQuantizer:
 
     def __init__(
         self,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
         compute_dtype: torch.dtype = torch.bfloat16,
     ):
         """Initialize the quantizer.
@@ -100,7 +99,7 @@ class BitsAndBytesQuantizer:
         bits: int = 4,
         quant_type: BnBQuantType = BnBQuantType.NF4,
         use_double_quant: bool = True,
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
     ) -> Path:
         """Quantize a model using bitsandbytes.
 
@@ -195,7 +194,7 @@ class BitsAndBytesQuantizer:
             with open(output_path / "quantization_config.json", "w") as f:
                 json.dump(metadata, f, indent=2)
 
-            sys.stderr.write(f"BnB: Quantization complete!\n")
+            sys.stderr.write("BnB: Quantization complete!\n")
             return output_path
 
         except Exception as e:

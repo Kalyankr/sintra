@@ -1,6 +1,5 @@
 """Tests for the hardware profile parser."""
 
-import tempfile
 from pathlib import Path
 
 import pytest

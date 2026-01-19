@@ -1,6 +1,5 @@
 """Tests for history formatting utilities."""
 
-import pytest
 
 from sintra.agents.utils import (
     format_history_for_llm,

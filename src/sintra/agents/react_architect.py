@@ -8,7 +8,7 @@ This module implements a more agentic architect that can:
 
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field
@@ -17,7 +17,6 @@ from sintra.agents.factory import get_tool_enabled_llm
 from sintra.agents.state import SintraState
 from sintra.agents.tools import get_architect_tools
 from sintra.agents.utils import (
-    format_history_for_llm,
     get_untried_variations,
     is_duplicate_recipe,
 )
@@ -37,11 +36,11 @@ class ReActStep(BaseModel):
     action: str = Field(
         description="The action to take: 'tool_call' or 'propose_recipe'"
     )
-    tool_name: Optional[str] = Field(default=None, description="Name of tool to call")
-    tool_input: Optional[Dict[str, Any]] = Field(
+    tool_name: str | None = Field(default=None, description="Name of tool to call")
+    tool_input: dict[str, Any] | None = Field(
         default=None, description="Input for tool"
     )
-    observation: Optional[str] = Field(
+    observation: str | None = Field(
         default=None, description="Result from tool call"
     )
 
@@ -49,10 +48,10 @@ class ReActStep(BaseModel):
 class ArchitectReasoning(BaseModel):
     """Complete reasoning chain from the architect."""
 
-    steps: List[ReActStep] = Field(
+    steps: list[ReActStep] = Field(
         default_factory=list, description="ReAct reasoning steps"
     )
-    final_recipe: Optional[ModelRecipe] = Field(
+    final_recipe: ModelRecipe | None = Field(
         default=None, description="Proposed recipe"
     )
     confidence: float = Field(default=0.5, description="Confidence in the recipe (0-1)")
@@ -121,7 +120,7 @@ Do not make more than {max_tools} tool calls.
 """
 
 
-def react_architect_node(state: SintraState) -> Dict[str, Any]:
+def react_architect_node(state: SintraState) -> dict[str, Any]:
     """ReAct-style architect node with tool use.
 
     This architect:
@@ -177,7 +176,7 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
         ),
     ]
 
-    reasoning_steps: List[ReActStep] = []
+    reasoning_steps: list[ReActStep] = []
     tool_iterations = 0
     final_recipe = None
 
@@ -210,7 +209,7 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
                             else str(tool_result)
                         )
                     except Exception as e:
-                        observation = f"Tool error: {str(e)}"
+                        observation = f"Tool error: {e!s}"
                 else:
                     observation = f"Unknown tool: {tool_name}"
 
@@ -292,7 +291,7 @@ def react_architect_node(state: SintraState) -> Dict[str, Any]:
     }
 
 
-def _debug_recipe(state: SintraState) -> Dict[str, Any]:
+def _debug_recipe(state: SintraState) -> dict[str, Any]:
     """Return a debug recipe without LLM calls."""
     test_recipe = ModelRecipe(
         bits=4,
@@ -307,7 +306,7 @@ def _debug_recipe(state: SintraState) -> Dict[str, Any]:
     }
 
 
-def _fallback_recipe(state: SintraState, error: str) -> Dict[str, Any]:
+def _fallback_recipe(state: SintraState, error: str) -> dict[str, Any]:
     """Return a fallback recipe when LLM fails."""
     log_transition(
         "Architect",
@@ -329,7 +328,7 @@ def _fallback_recipe(state: SintraState, error: str) -> Dict[str, Any]:
     }
 
 
-def _format_past_attempts(history: List[Dict]) -> str:
+def _format_past_attempts(history: list[dict]) -> str:
     """Format past attempts for the prompt."""
     if not history:
         return "No previous attempts. This is the first iteration."
@@ -347,7 +346,7 @@ def _format_past_attempts(history: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def _get_strategy_hints(history: List[Dict]) -> str:
+def _get_strategy_hints(history: list[dict]) -> str:
     """Generate strategy hints based on history."""
     if not history:
         return "Start with a balanced approach: 4-bit quantization, minimal pruning."
@@ -372,7 +371,7 @@ def _get_strategy_hints(history: List[Dict]) -> str:
 
 def _extract_recipe_from_response(
     response: AIMessage, state: SintraState
-) -> Optional[ModelRecipe]:
+) -> ModelRecipe | None:
     """Try to extract a recipe from the LLM response."""
     content = response.content
 
@@ -401,7 +400,7 @@ def _extract_recipe_from_response(
     return None
 
 
-def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: List[Dict]) -> ModelRecipe:
+def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: list[dict]) -> ModelRecipe:
     """Modify a recipe to make it unique."""
     bit_options = [2, 3, 4, 5, 6, 8]
     pruning_options = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
@@ -439,7 +438,7 @@ def _modify_to_avoid_duplicate(recipe: ModelRecipe, history: List[Dict]) -> Mode
     )
 
 
-def _build_reasoning_summary(steps: List[ReActStep]) -> str:
+def _build_reasoning_summary(steps: list[ReActStep]) -> str:
     """Build a human-readable summary of the reasoning chain."""
     if not steps:
         return "No reasoning steps recorded."

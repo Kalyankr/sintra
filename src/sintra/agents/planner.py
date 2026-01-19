@@ -8,7 +8,7 @@ optimization begins, deciding on approaches like:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -28,8 +28,8 @@ class OptimizationStep(BaseModel):
         description="Strategy type: 'explore', 'exploit', 'binary_search', 'known_good'"
     )
     description: str = Field(description="Human-readable description of what to try")
-    target_bits: Optional[int] = Field(default=None, description="Suggested bit width")
-    target_pruning: Optional[float] = Field(
+    target_bits: int | None = Field(default=None, description="Suggested bit width")
+    target_pruning: float | None = Field(
         default=None, description="Suggested pruning ratio"
     )
     rationale: str = Field(description="Why this step makes sense")
@@ -43,7 +43,7 @@ class OptimizationPlan(BaseModel):
     overall_strategy: str = Field(
         description="High-level strategy: 'conservative', 'aggressive', 'balanced', 'adaptive'"
     )
-    steps: List[OptimizationStep] = Field(
+    steps: list[OptimizationStep] = Field(
         default_factory=list, description="Ordered list of optimization steps"
     )
     max_iterations: int = Field(
@@ -131,7 +131,7 @@ Create a plan with 3-5 steps that efficiently explores the search space.
 """
 
 
-def planner_node(state: SintraState) -> Dict[str, Any]:
+def planner_node(state: SintraState) -> dict[str, Any]:
     """Create an optimization plan before starting the search.
 
     This node:
@@ -380,9 +380,7 @@ def _estimate_model_size(model_id: str) -> str:
         if any(x in model_lower for x in ["1.3b", "1.1b"]):
             return "1B"
         return "3B"
-    elif any(x in model_lower for x in ["1b", "1.1b", "1.3b"]):
-        return "1B"
-    elif any(x in model_lower for x in ["tiny", "small", "mini"]):
+    elif any(x in model_lower for x in ["1b", "1.1b", "1.3b"]) or any(x in model_lower for x in ["tiny", "small", "mini"]):
         return "1B"
     else:
         return "Unknown"
@@ -390,7 +388,7 @@ def _estimate_model_size(model_id: str) -> str:
 
 def get_plan_guidance(
     plan: OptimizationPlan, iteration: int
-) -> Optional[OptimizationStep]:
+) -> OptimizationStep | None:
     """Get the appropriate step from the plan for the current iteration.
 
     Args:

@@ -5,7 +5,7 @@ about compression strategies before proposing recipes.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -39,8 +39,8 @@ class ModelSearchResult(BaseModel):
     model_id: str = Field(description="The HuggingFace model ID")
     downloads: int = Field(description="Number of downloads")
     likes: int = Field(description="Number of likes")
-    tags: List[str] = Field(default_factory=list, description="Model tags")
-    quantization_info: Optional[str] = Field(
+    tags: list[str] = Field(default_factory=list, description="Model tags")
+    quantization_info: str | None = Field(
         default=None, description="Known quantization variants"
     )
 
@@ -66,7 +66,7 @@ class HardwareCapability(BaseModel):
     available_vram_gb: float = Field(description="Available VRAM/RAM in GB")
     supports_4bit: bool = Field(description="Whether 4-bit quantization is supported")
     supports_8bit: bool = Field(description="Whether 8-bit quantization is supported")
-    recommended_bits: List[int] = Field(description="Recommended bit widths")
+    recommended_bits: list[int] = Field(description="Recommended bit widths")
     max_model_params_billions: float = Field(
         description="Maximum model parameters in billions"
     )
@@ -78,7 +78,7 @@ class HardwareCapability(BaseModel):
 
 
 @tool
-def get_model_architecture(model_id: str) -> Dict[str, Any]:
+def get_model_architecture(model_id: str) -> dict[str, Any]:
     """Fetch the actual architecture of a model from HuggingFace.
 
     ALWAYS use this tool before proposing layer dropping or pruning
@@ -106,7 +106,7 @@ def get_model_architecture(model_id: str) -> Dict[str, Any]:
                 filename="config.json",
                 repo_type="model",
             )
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = json.load(f)
         except Exception as e:
             logger.warning(f"Could not download config.json: {e}")
@@ -188,7 +188,7 @@ def _estimate_parameters(
     return total
 
 
-def _estimate_architecture_from_name(model_id: str, model_info: Any) -> Dict[str, Any]:
+def _estimate_architecture_from_name(model_id: str, model_info: Any) -> dict[str, Any]:
     """Estimate architecture based on model name patterns."""
     name_lower = model_id.lower()
 
@@ -239,7 +239,7 @@ def search_similar_models(
     base_model: str,
     task: str = "text-generation",
     max_results: int = 5,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Search HuggingFace for similar or quantized versions of a model.
 
     Use this tool to find existing quantized versions of a model or
@@ -264,7 +264,7 @@ def _search_huggingface_models(
     base_model: str,
     task: str,
     max_results: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Search HuggingFace Hub for similar/quantized models."""
     from huggingface_hub import HfApi
 
@@ -353,7 +353,7 @@ def _search_huggingface_models(
     return results[:max_results]
 
 
-def _detect_quantization_type(model_id: str, tags: List[str]) -> str:
+def _detect_quantization_type(model_id: str, tags: list[str]) -> str:
     """Detect quantization type from model ID and tags."""
     model_lower = model_id.lower()
     tags_lower = [t.lower() for t in tags]
@@ -394,7 +394,7 @@ def _fallback_model_search(
     base_model: str,
     task: str,
     max_results: int,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Fallback search when HuggingFace API is unavailable."""
     model_family = base_model.split("/")[-1].lower()
     results = []
@@ -463,7 +463,7 @@ def estimate_compression_impact(
     pruning_ratio: float,
     layers_to_drop: int = 0,
     total_layers: int = 32,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Estimate the impact of compression settings on model performance.
 
     Use this tool before proposing a recipe to predict whether it will
@@ -563,8 +563,8 @@ def query_hardware_capabilities(
     device_name: str,
     available_memory_gb: float,
     has_gpu: bool = False,
-    gpu_type: Optional[str] = None,
-) -> Dict[str, Any]:
+    gpu_type: str | None = None,
+) -> dict[str, Any]:
     """Query what compression configurations are supported by the target hardware.
 
     Use this tool to understand what quantization methods and model sizes
@@ -634,7 +634,7 @@ def query_hardware_capabilities(
 def lookup_quantization_benchmarks(
     model_family: str,
     bits: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Look up known benchmark results for a model family at a specific bit width.
 
     Use this tool to see what performance others have achieved with
@@ -657,7 +657,7 @@ def lookup_quantization_benchmarks(
     return _lookup_reference_benchmarks(model_family, bits)
 
 
-def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any]]:
+def _lookup_from_history(model_family: str, bits: int) -> dict[str, Any] | None:
     """Look up benchmark results from Sintra's own history database."""
     try:
         from sintra.persistence import get_history_db
@@ -748,7 +748,7 @@ def _lookup_from_history(model_family: str, bits: int) -> Optional[Dict[str, Any
         return None
 
 
-def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]:
+def _lookup_reference_benchmarks(model_family: str, bits: int) -> dict[str, Any]:
     """Look up reference benchmark data (fallback when no local history)."""
     # Reference benchmark database based on community results
     benchmarks = {
@@ -858,7 +858,7 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> Dict[str, Any]
 # ============================================================================
 
 
-def get_architect_tools() -> List:
+def get_architect_tools() -> list:
     """Get all tools available to the architect agent."""
     return [
         get_model_architecture,  # ALWAYS call first to know layer count

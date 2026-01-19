@@ -1,5 +1,5 @@
 import os
-from typing import List, Union
+from typing import Union
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
@@ -92,7 +92,7 @@ def get_architect_llm(config: LLMConfig) -> StructuredLLM:
     return llm.with_structured_output(ModelRecipe)
 
 
-def get_tool_enabled_llm(config: LLMConfig, tools: List) -> BaseChatModel:
+def get_tool_enabled_llm(config: LLMConfig, tools: list) -> BaseChatModel:
     """Returns an LLM instance with tool-calling capabilities.
 
     Args:

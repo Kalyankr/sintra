@@ -7,7 +7,6 @@ import pytest
 
 from sintra.compression.downloader import (
     DEFAULT_CACHE_DIR,
-    DownloadError,
     ModelDownloader,
 )
 from sintra.compression.evaluator import (

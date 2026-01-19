@@ -6,10 +6,11 @@ allowing the agent to learn from past runs and avoid repeating failures.
 
 import json
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Optional
 
 from sintra.profiles.models import ExperimentResult, HardwareProfile, ModelRecipe
 
@@ -22,7 +23,7 @@ class ExperimentRecord:
 
     def __init__(
         self,
-        id: Optional[int],
+        id: int | None,
         run_id: str,
         model_id: str,
         hardware_name: str,
@@ -71,7 +72,7 @@ class HistoryDB:
         >>> similar = db.find_similar_experiments(model_id, hardware_name)
     """
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Path | None = None):
         """Initialize the database.
 
         Args:
@@ -246,7 +247,7 @@ class HistoryDB:
         run_id: str,
         final_iteration: int,
         is_converged: bool,
-        best_recipe: Optional[ModelRecipe] = None,
+        best_recipe: ModelRecipe | None = None,
         status: str = "completed",
     ) -> None:
         """Record the completion of an optimization run.
@@ -283,7 +284,7 @@ class HistoryDB:
     def find_similar_experiments(
         self,
         model_id: str,
-        hardware_name: Optional[str] = None,
+        hardware_name: str | None = None,
         successful_only: bool = False,
         limit: int = 50,
     ) -> list[ExperimentRecord]:
@@ -323,7 +324,7 @@ class HistoryDB:
         self,
         model_id: str,
         hardware_name: str,
-    ) -> Optional[tuple[ModelRecipe, ExperimentResult]]:
+    ) -> tuple[ModelRecipe, ExperimentResult] | None:
         """Get the best successful recipe for a model/hardware combo.
 
         "Best" = highest accuracy among successful experiments.
@@ -357,7 +358,7 @@ class HistoryDB:
     def get_failed_recipes(
         self,
         model_id: str,
-        hardware_name: Optional[str] = None,
+        hardware_name: str | None = None,
     ) -> list[ModelRecipe]:
         """Get recipes that failed for a model/hardware combo.
 
@@ -394,7 +395,7 @@ class HistoryDB:
             for row in rows
         ]
 
-    def get_run(self, run_id: str) -> Optional[dict]:
+    def get_run(self, run_id: str) -> dict | None:
         """Get run metadata by ID.
 
         Args:
@@ -507,10 +508,10 @@ class HistoryDB:
 
 
 # Convenience functions for global database access
-_global_db: Optional[HistoryDB] = None
+_global_db: HistoryDB | None = None
 
 
-def get_history_db(db_path: Optional[Path] = None) -> HistoryDB:
+def get_history_db(db_path: Path | None = None) -> HistoryDB:
     """Get the global history database instance.
 
     Args:

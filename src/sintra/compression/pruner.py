@@ -11,7 +11,6 @@ import json
 import logging
 import shutil
 from pathlib import Path
-from typing import Optional
 
 import torch
 from safetensors import safe_open
@@ -37,7 +36,7 @@ class ModelConfig:
         if not config_path.exists():
             raise PruningError(f"Config file not found: {config_path}")
 
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             self.config = json.load(f)
         self.config_path = config_path
 
@@ -68,7 +67,7 @@ class ModelConfig:
             return archs[0]
         return self.config.get("model_type", "unknown")
 
-    def save(self, output_path: Optional[Path] = None):
+    def save(self, output_path: Path | None = None):
         """Save config to file."""
         save_path = output_path or self.config_path
         with open(save_path, "w") as f:
@@ -95,7 +94,7 @@ class LayerDropper:
         ... )
     """
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         """Initialize the layer dropper.
 
         Args:
@@ -109,7 +108,7 @@ class LayerDropper:
         self,
         model_path: Path,
         layers_to_drop: list[int],
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
     ) -> Path:
         """Remove specified layers from a model.
 
@@ -191,7 +190,7 @@ class LayerDropper:
     def _copy_non_weight_files(self, src: Path, dst: Path):
         """Copy config and other non-weight files."""
         for file in src.iterdir():
-            if file.is_file() and not file.suffix in [".safetensors", ".bin"]:
+            if file.is_file() and file.suffix not in [".safetensors", ".bin"]:
                 if file.name not in ["model.safetensors.index.json"]:
                     shutil.copy2(file, dst / file.name)
 
@@ -292,7 +291,7 @@ class LayerDropper:
         save_file(all_tensors, output_file)
         logger.info(f"Saved {len(all_tensors)} tensors to {output_file}")
 
-    def _extract_layer_index(self, key: str) -> Optional[int]:
+    def _extract_layer_index(self, key: str) -> int | None:
         """Extract layer index from a tensor key.
 
         Handles various naming conventions:
@@ -357,7 +356,7 @@ class StructuredPruner:
         ... )
     """
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         """Initialize the structured pruner.
 
         Args:
@@ -371,7 +370,7 @@ class StructuredPruner:
         self,
         model_path: Path,
         pruning_ratio: float,
-        output_name: Optional[str] = None,
+        output_name: str | None = None,
         strategy: str = "magnitude",
     ) -> Path:
         """Apply structured pruning to model weights.
@@ -578,7 +577,7 @@ class StructuredPruner:
 def drop_layers(
     model_path: Path,
     layers_to_drop: list[int],
-    cache_dir: Optional[Path] = None,
+    cache_dir: Path | None = None,
 ) -> Path:
     """Convenience function to drop layers from a model.
 
@@ -597,7 +596,7 @@ def drop_layers(
 def prune_model(
     model_path: Path,
     pruning_ratio: float,
-    cache_dir: Optional[Path] = None,
+    cache_dir: Path | None = None,
     strategy: str = "magnitude",
 ) -> Path:
     """Convenience function to prune a model.
@@ -618,8 +617,8 @@ def prune_model(
 def apply_compression(
     model_path: Path,
     pruning_ratio: float = 0.0,
-    layers_to_drop: Optional[list[int]] = None,
-    cache_dir: Optional[Path] = None,
+    layers_to_drop: list[int] | None = None,
+    cache_dir: Path | None = None,
 ) -> Path:
     """Apply both pruning and layer dropping to a model.
 

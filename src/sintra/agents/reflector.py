@@ -7,7 +7,7 @@ This module implements a reflector agent that:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -43,13 +43,13 @@ class Reflection(BaseModel):
     """Complete reflection output from the reflector node."""
 
     iteration_analyzed: int = Field(description="Which iteration was analyzed")
-    failures: List[FailureAnalysis] = Field(
+    failures: list[FailureAnalysis] = Field(
         default_factory=list, description="List of identified failures"
     )
-    patterns: List[str] = Field(
+    patterns: list[str] = Field(
         default_factory=list, description="Patterns observed across attempts"
     )
-    adjustments: List[StrategyAdjustment] = Field(
+    adjustments: list[StrategyAdjustment] = Field(
         default_factory=list, description="Recommended strategy adjustments"
     )
     confidence: float = Field(
@@ -113,7 +113,7 @@ Provide your analysis as JSON:
 """
 
 
-def reflector_node(state: SintraState) -> Dict[str, Any]:
+def reflector_node(state: SintraState) -> dict[str, Any]:
     """Self-reflection node that analyzes failures and updates strategy.
 
     This node:
@@ -164,7 +164,7 @@ def reflector_node(state: SintraState) -> Dict[str, Any]:
     }
 
 
-def reflector_node_llm(state: SintraState) -> Dict[str, Any]:
+def reflector_node_llm(state: SintraState) -> dict[str, Any]:
     """LLM-powered reflector node for deeper analysis.
 
     Uses an LLM to provide more nuanced failure analysis and
@@ -236,7 +236,7 @@ def _all_targets_met(metrics, profile) -> bool:
     )
 
 
-def _analyze_history(history: List[Dict], profile, state: SintraState) -> Reflection:
+def _analyze_history(history: list[dict], profile, state: SintraState) -> Reflection:
     """Rule-based analysis of recent history."""
     failures = []
     patterns = []
@@ -380,7 +380,7 @@ def _analyze_history(history: List[Dict], profile, state: SintraState) -> Reflec
     )
 
 
-def _format_attempts_for_llm(history: List[Dict], profile) -> str:
+def _format_attempts_for_llm(history: list[dict], profile) -> str:
     """Format attempt history for LLM consumption."""
     lines = []
     targets = profile.targets

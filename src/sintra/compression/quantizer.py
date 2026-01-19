@@ -29,7 +29,6 @@ import subprocess
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +65,6 @@ def _get_convert_script_paths() -> list[Path]:
     - Python site-packages (from llama-cpp-python pip package)
     - Current virtualenv
     """
-    import sys
 
     paths = [
         # Standard llama.cpp clone locations
@@ -96,7 +94,7 @@ def _get_convert_script_paths() -> list[Path]:
     return paths
 
 
-def check_llama_cpp_available() -> Tuple[bool, str]:
+def check_llama_cpp_available() -> tuple[bool, str]:
     """Check if llama.cpp is properly installed.
 
     Returns:
@@ -190,7 +188,7 @@ class GGUFQuantizer:
         /home/user/.cache/sintra/quantized/tinyllama-q4_k_m.gguf
     """
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         """Initialize the quantizer.
 
         Args:
@@ -207,7 +205,7 @@ class GGUFQuantizer:
         self._llama_quantize = self._find_llama_quantize()
         self._convert_script = self._find_convert_script()
 
-    def _find_llama_quantize(self) -> Optional[Path]:
+    def _find_llama_quantize(self) -> Path | None:
         """Find llama-quantize binary."""
         # Check common locations
         candidates = [
@@ -227,7 +225,7 @@ class GGUFQuantizer:
 
         return None
 
-    def _find_convert_script(self) -> Optional[Path]:
+    def _find_convert_script(self) -> Path | None:
         """Find convert_hf_to_gguf.py script."""
         candidates = _get_convert_script_paths()
 
@@ -302,8 +300,8 @@ class GGUFQuantizer:
         self,
         model_path: Path,
         bits: int,
-        model_name: Optional[str] = None,
-        quant_type: Optional[QuantizationType] = None,
+        model_name: str | None = None,
+        quant_type: QuantizationType | None = None,
     ) -> Path:
         """Quantize a model to the specified bit depth.
 
@@ -404,8 +402,8 @@ class GGUFQuantizer:
         model_path: Path,
         bits: int,
         pruning_ratio: float = 0.0,
-        layers_to_drop: Optional[list[int]] = None,
-        model_name: Optional[str] = None,
+        layers_to_drop: list[int] | None = None,
+        model_name: str | None = None,
     ) -> Path:
         """Quantize with optional pruning and layer dropping.
 
@@ -470,8 +468,8 @@ class GGUFQuantizer:
 def quantize_model(
     model_path: Path,
     bits: int,
-    cache_dir: Optional[Path] = None,
-    model_name: Optional[str] = None,
+    cache_dir: Path | None = None,
+    model_name: str | None = None,
 ) -> Path:
     """Convenience function to quantize a model.
 
@@ -492,9 +490,9 @@ def quantize_with_compression(
     model_path: Path,
     bits: int,
     pruning_ratio: float = 0.0,
-    layers_to_drop: Optional[list[int]] = None,
-    cache_dir: Optional[Path] = None,
-    model_name: Optional[str] = None,
+    layers_to_drop: list[int] | None = None,
+    cache_dir: Path | None = None,
+    model_name: str | None = None,
 ) -> Path:
     """Convenience function to quantize with pruning/layer dropping.
 

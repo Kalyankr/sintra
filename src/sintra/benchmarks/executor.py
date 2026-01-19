@@ -81,7 +81,7 @@ class StandaloneExecutor(BenchmarkExecutor):
                 process.kill()
                 return self._error_result("Process timed out (600s limit)")
             except Exception as e:
-                return self._error_result(f"Executor internal error: {str(e)}")
+                return self._error_result(f"Executor internal error: {e!s}")
 
         # Handle Exit Codes & Empty Outputs
         if process.returncode != 0:
@@ -98,7 +98,7 @@ class StandaloneExecutor(BenchmarkExecutor):
         try:
             return ExperimentResult.model_validate_json(stdout)
         except Exception as e:
-            return self._error_result(f"Failed to parse worker output: {str(e)}")
+            return self._error_result(f"Failed to parse worker output: {e!s}")
 
     def _error_result(self, msg: str) -> ExperimentResult:
         """Helper to create a failed experiment result."""

@@ -10,7 +10,6 @@ import logging
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from llama_cpp import Llama
 
@@ -96,7 +95,7 @@ class AccuracyEvaluator:
 
     def __init__(
         self,
-        eval_text: Optional[str] = None,
+        eval_text: str | None = None,
         n_ctx: int = 512,
         n_threads: int = 4,
     ):
@@ -373,7 +372,7 @@ def compare_accuracy(
 def evaluate_with_baseline(
     optimized_model_path: Path,
     model_id: str,
-    cache_dir: Optional[Path] = None,
+    cache_dir: Path | None = None,
     quick: bool = True,
 ) -> AccuracyComparison:
     """Evaluate optimized model against baseline from HuggingFace.

@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, Any, Dict, List, Optional, TypedDict, Union
+from typing import Annotated, Any, TypedDict
 
 from sintra.profiles.models import (
     ExperimentResult,
@@ -26,16 +26,16 @@ class SintraState(TypedDict):
     run_id: str
 
     # Current Work-in-Progress
-    current_recipe: Optional[ModelRecipe]
+    current_recipe: ModelRecipe | None
 
     # History (Annotated with operator.add, results append automatically)
     history: Annotated[
-        List[Dict[str, Union[ModelRecipe, ExperimentResult]]], operator.add
+        list[dict[str, ModelRecipe | ExperimentResult]], operator.add
     ]
     # critic feedback
     critic_feedback: str
     # best recipe (dict with 'recipe' and 'metrics' keys)
-    best_recipe: Optional[Dict[str, Union[ModelRecipe, ExperimentResult]]]
+    best_recipe: dict[str, ModelRecipe | ExperimentResult] | None
 
     # Progress Tracking
     iteration: int
@@ -47,12 +47,12 @@ class SintraState(TypedDict):
 
     # Agentic features (ReAct pattern)
     use_react: bool  # Whether to use ReAct-style architect
-    reasoning_chain: Optional[List[Any]]  # ReAct reasoning steps
-    reasoning_summary: Optional[str]  # Human-readable reasoning summary
+    reasoning_chain: list[Any] | None  # ReAct reasoning steps
+    reasoning_summary: str | None  # Human-readable reasoning summary
 
     # Self-reflection
-    reflection: Optional[Any]  # Reflection analysis from reflector node
-    strategy_adjustments: Optional[List[Any]]  # Recommended strategy changes
+    reflection: Any | None  # Reflection analysis from reflector node
+    strategy_adjustments: list[Any] | None  # Recommended strategy changes
 
     # Planner
-    optimization_plan: Optional[Any]  # OptimizationPlan from planner node
+    optimization_plan: Any | None  # OptimizationPlan from planner node

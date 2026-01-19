@@ -7,7 +7,6 @@ HardwareProfile objects without requiring manual YAML files.
 import platform
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 import psutil
 
@@ -28,7 +27,7 @@ def detect_cuda() -> bool:
         return False
 
 
-def get_gpu_vram_gb() -> Optional[float]:
+def get_gpu_vram_gb() -> float | None:
     """Get GPU VRAM in GB if available."""
     try:
         result = subprocess.run(
@@ -97,7 +96,7 @@ def detect_system_name() -> str:
     elif system == "Linux":
         # Check for Raspberry Pi
         try:
-            with open("/proc/device-tree/model", "r") as f:
+            with open("/proc/device-tree/model") as f:
                 model = f.read().strip().rstrip("\x00")
                 if "Raspberry Pi" in model:
                     return f"{model} ({ram_gb}GB)"
@@ -106,7 +105,7 @@ def detect_system_name() -> str:
 
         # Check for Jetson
         try:
-            with open("/etc/nv_tegra_release", "r") as f:
+            with open("/etc/nv_tegra_release") as f:
                 return f"NVIDIA Jetson ({ram_gb}GB)"
         except (FileNotFoundError, PermissionError):
             pass
@@ -210,9 +209,9 @@ def estimate_target_accuracy(vram_gb: float) -> float:
 
 
 def auto_detect_hardware(
-    target_tps: Optional[float] = None,
-    target_accuracy: Optional[float] = None,
-    max_latency_ms: Optional[float] = None,
+    target_tps: float | None = None,
+    target_accuracy: float | None = None,
+    max_latency_ms: float | None = None,
 ) -> HardwareProfile:
     """Auto-detect hardware and create a HardwareProfile.
 
@@ -315,7 +314,7 @@ def save_profile_to_yaml(profile: HardwareProfile, path: Path) -> Path:
     return path
 
 
-def print_hardware_info(save_path: Optional[Path] = None) -> Optional[Path]:
+def print_hardware_info(save_path: Path | None = None) -> Path | None:
     """Print detected hardware information to console.
 
     Args:

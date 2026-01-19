@@ -12,24 +12,18 @@ Markers:
 """
 
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from sintra.agents.nodes import architect_node, benchmarker_node, critic_node
-from sintra.agents.state import SintraState
-from sintra.benchmarks.executor import MockExecutor
 from sintra.checkpoint import (
     delete_checkpoint,
     list_checkpoints,
     load_checkpoint,
     save_checkpoint,
 )
-from sintra.persistence import HistoryDB, get_history_db
+from sintra.persistence import HistoryDB
 from sintra.profiles.models import (
     Constraints,
     HardwareProfile,

@@ -1,6 +1,5 @@
 """Tests for the Sintra agent tools."""
 
-import pytest
 
 from sintra.agents.tools import (
     estimate_compression_impact,

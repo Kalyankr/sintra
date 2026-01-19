@@ -14,7 +14,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import psutil
 from llama_cpp import Llama
@@ -31,7 +30,7 @@ def download_and_quantize(
     model_id: str,
     bits: int,
     pruning_ratio: float = 0.0,
-    layers_to_drop: Optional[list[int]] = None,
+    layers_to_drop: list[int] | None = None,
 ) -> str:
     """Download a model and quantize it with optional compression.
 
@@ -323,14 +322,14 @@ def run_transformers_benchmark(
             actual_vram_usage=0,
             accuracy_score=0,
             was_successful=False,
-            error_log=f"Benchmark failed: {str(e)}",
+            error_log=f"Benchmark failed: {e!s}",
         )
 
 
 def run_benchmark(
     model_path: str,
     evaluate_accuracy_flag: bool = True,
-    model_id: Optional[str] = None,
+    model_id: str | None = None,
     use_baseline: bool = False,
 ) -> ExperimentResult:
     """Run benchmark on a GGUF model.
@@ -457,7 +456,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
             f"backend={backend}\n"
         )
 
-        model_path: Optional[str] = None
+        model_path: str | None = None
 
         # Route to appropriate backend
         if backend == "bnb":
@@ -512,7 +511,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
             actual_vram_usage=0,
             accuracy_score=0,
             was_successful=False,
-            error_log=f"Surgery failed: {str(e)}",
+            error_log=f"Surgery failed: {e!s}",
         )
 
 
@@ -544,7 +543,7 @@ def main():
         sys.stderr.write(f"Worker: Invalid JSON input: {e}\n")
         sys.exit(1)
     except Exception as e:
-        sys.stderr.write(f"Worker Crash: {str(e)}\n")
+        sys.stderr.write(f"Worker Crash: {e!s}\n")
         sys.exit(1)
 
 

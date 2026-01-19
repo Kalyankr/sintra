@@ -5,7 +5,6 @@ Handles downloading, caching, and locating HuggingFace models.
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
@@ -34,7 +33,7 @@ class ModelDownloader:
         /home/user/.cache/sintra/downloads/TinyLlama--TinyLlama-1.1B-Chat-v1.0
     """
 
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Path | None = None):
         """Initialize the downloader.
 
         Args:
@@ -49,7 +48,7 @@ class ModelDownloader:
         self,
         model_id: str,
         revision: str = "main",
-        token: Optional[str] = None,
+        token: str | None = None,
     ) -> Path:
         """Download a model from HuggingFace Hub.
 
@@ -151,8 +150,8 @@ class ModelDownloader:
 
 def download_model(
     model_id: str,
-    cache_dir: Optional[Path] = None,
-    token: Optional[str] = None,
+    cache_dir: Path | None = None,
+    token: str | None = None,
 ) -> Path:
     """Convenience function to download a model.
 

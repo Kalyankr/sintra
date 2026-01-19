@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from sintra.agents.factory import get_architect_llm
 from sintra.benchmarks.executor import MockExecutor, StandaloneExecutor
@@ -19,7 +19,7 @@ DEFAULT_OUTPUT_DIR = Path("outputs")
 DEFAULT_OUTPUT_FILE = DEFAULT_OUTPUT_DIR / "optimized_recipe.json"
 
 # Type alias for state updates
-StateUpdate = Dict[str, Any]
+StateUpdate = dict[str, Any]
 
 
 class LLMConnectionError(Exception):
@@ -437,7 +437,6 @@ def critic_router(state: SintraState) -> str:
 # LLM-Based Routing (Alternative to rule-based critic_router)
 # ============================================================================
 
-from typing import Literal
 
 from pydantic import BaseModel, Field
 

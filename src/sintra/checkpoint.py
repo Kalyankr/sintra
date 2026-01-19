@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from sintra.profiles.models import HardwareProfile, LLMConfig, ModelRecipe
 
@@ -20,7 +20,7 @@ def get_checkpoint_path(run_id: str) -> Path:
     return get_checkpoint_dir() / f"{run_id}.json"
 
 
-def serialize_state(state: Dict[str, Any]) -> Dict[str, Any]:
+def serialize_state(state: dict[str, Any]) -> dict[str, Any]:
     """Convert state to JSON-serializable format."""
     serialized = {}
 
@@ -92,7 +92,7 @@ def serialize_state(state: Dict[str, Any]) -> Dict[str, Any]:
     return serialized
 
 
-def deserialize_state(data: Dict[str, Any]) -> Dict[str, Any]:
+def deserialize_state(data: dict[str, Any]) -> dict[str, Any]:
     """Convert JSON data back to state format with proper types."""
     from sintra.profiles.models import (
         Constraints,
@@ -100,7 +100,6 @@ def deserialize_state(data: Dict[str, Any]) -> Dict[str, Any]:
         HardwareProfile,
         LLMConfig,
         LLMProvider,
-        ModelRecipe,
         Targets,
     )
 
@@ -141,7 +140,7 @@ def deserialize_state(data: Dict[str, Any]) -> Dict[str, Any]:
     return deserialized
 
 
-def save_checkpoint(run_id: str, state: Dict[str, Any], iteration: int) -> Path:
+def save_checkpoint(run_id: str, state: dict[str, Any], iteration: int) -> Path:
     """Save a checkpoint of the current state.
 
     Args:
@@ -170,7 +169,7 @@ def save_checkpoint(run_id: str, state: Dict[str, Any], iteration: int) -> Path:
     return checkpoint_path
 
 
-def load_checkpoint(run_id: str) -> Optional[Dict[str, Any]]:
+def load_checkpoint(run_id: str) -> dict[str, Any] | None:
     """Load a checkpoint by run ID.
 
     Args:
@@ -184,7 +183,7 @@ def load_checkpoint(run_id: str) -> Optional[Dict[str, Any]]:
     if not checkpoint_path.exists():
         return None
 
-    with open(checkpoint_path, "r") as f:
+    with open(checkpoint_path) as f:
         data = json.load(f)
 
     # Deserialize the state
@@ -193,7 +192,7 @@ def load_checkpoint(run_id: str) -> Optional[Dict[str, Any]]:
     return data
 
 
-def find_latest_checkpoint(model_id: str = None) -> Optional[Dict[str, Any]]:
+def find_latest_checkpoint(model_id: str = None) -> dict[str, Any] | None:
     """Find the most recent checkpoint, optionally filtering by model.
 
     Args:
@@ -212,7 +211,7 @@ def find_latest_checkpoint(model_id: str = None) -> Optional[Dict[str, Any]]:
 
     for checkpoint_file in checkpoint_dir.glob("*.json"):
         try:
-            with open(checkpoint_file, "r") as f:
+            with open(checkpoint_file) as f:
                 data = json.load(f)
 
             # Filter by model if specified
@@ -233,7 +232,7 @@ def find_latest_checkpoint(model_id: str = None) -> Optional[Dict[str, Any]]:
     return latest
 
 
-def list_checkpoints() -> List[Dict[str, Any]]:
+def list_checkpoints() -> list[dict[str, Any]]:
     """List all available checkpoints.
 
     Returns:
@@ -248,7 +247,7 @@ def list_checkpoints() -> List[Dict[str, Any]]:
 
     for checkpoint_file in checkpoint_dir.glob("*.json"):
         try:
-            with open(checkpoint_file, "r") as f:
+            with open(checkpoint_file) as f:
                 data = json.load(f)
 
             checkpoints.append(

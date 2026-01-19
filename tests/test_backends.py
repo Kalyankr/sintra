@@ -1,7 +1,6 @@
 """Tests for advanced quantization backends (bitsandbytes, ONNX/optimum)."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -92,11 +91,9 @@ class TestCompressionModuleExports:
     def test_can_import_core_exports(self):
         """Test core exports can be imported."""
         from sintra.compression import (
-            AccuracyEvaluator,
             GGUFQuantizer,
             LayerDropper,
             ModelDownloader,
-            StructuredPruner,
         )
 
         # All core imports should succeed

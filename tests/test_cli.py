@@ -9,19 +9,28 @@ import pytest
 class TestCliArgs:
     """Tests for CLI argument parsing."""
 
-    def test_profile_required_without_auto_detect(self):
-        """Should require profile when --auto-detect not used."""
+    def test_auto_detect_is_default(self):
+        """Auto-detect should be enabled by default (no flags needed)."""
         from sintra.cli import parse_args
 
         with patch.object(sys, "argv", ["sintra"]):
+            args = parse_args()
+            assert args.auto_detect is True
+            assert args.profile is None
+
+    def test_no_auto_detect_requires_profile(self):
+        """Should require profile when --no-auto-detect is used."""
+        from sintra.cli import parse_args
+
+        with patch.object(sys, "argv", ["sintra", "--no-auto-detect"]):
             with pytest.raises(SystemExit):
                 parse_args()
 
     def test_profile_optional_with_auto_detect(self):
-        """Should not require profile when --auto-detect is used."""
+        """Should not require profile when auto-detect is enabled (default)."""
         from sintra.cli import parse_args
 
-        with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
+        with patch.object(sys, "argv", ["sintra"]):
             args = parse_args()
             assert args.auto_detect is True
             assert args.profile is None
@@ -30,9 +39,7 @@ class TestCliArgs:
         """Should parse --output-dir flag."""
         from sintra.cli import parse_args
 
-        with patch.object(
-            sys, "argv", ["sintra", "--auto-detect", "--output-dir", "/tmp/models"]
-        ):
+        with patch.object(sys, "argv", ["sintra", "--output-dir", "/tmp/models"]):
             args = parse_args()
             assert args.output_dir == "/tmp/models"
 
@@ -40,7 +47,7 @@ class TestCliArgs:
         """Should parse --dry-run flag."""
         from sintra.cli import parse_args
 
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--dry-run"]):
+        with patch.object(sys, "argv", ["sintra", "--dry-run"]):
             args = parse_args()
             assert args.dry_run is True
 
@@ -48,9 +55,7 @@ class TestCliArgs:
         """Should parse --target-tps flag."""
         from sintra.cli import parse_args
 
-        with patch.object(
-            sys, "argv", ["sintra", "--auto-detect", "--target-tps", "50.0"]
-        ):
+        with patch.object(sys, "argv", ["sintra", "--target-tps", "50.0"]):
             args = parse_args()
             assert args.target_tps == 50.0
 
@@ -58,18 +63,21 @@ class TestCliArgs:
         """Should parse --target-accuracy flag."""
         from sintra.cli import parse_args
 
-        with patch.object(
-            sys, "argv", ["sintra", "--auto-detect", "--target-accuracy", "0.8"]
-        ):
+        with patch.object(sys, "argv", ["sintra", "--target-accuracy", "0.8"]):
             args = parse_args()
             assert args.target_accuracy == 0.8
 
     def test_default_values(self):
-        """Should have sensible defaults."""
+        """Should have sensible defaults with zero flags."""
         from sintra.cli import parse_args
 
-        with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
+        with patch.object(sys, "argv", ["sintra"]):
             args = parse_args()
+            # Auto-detect is now default
+            assert args.auto_detect is True
+            # Baseline comparison is now default
+            assert args.baseline is True
+            # Standard defaults
             assert args.backend == "gguf"
             assert args.output_dir is None
             assert args.dry_run is False
@@ -86,7 +94,6 @@ class TestCliArgs:
             "argv",
             [
                 "sintra",
-                "--auto-detect",
                 "--dry-run",
                 "--output-dir",
                 "/tmp/out",
@@ -101,13 +108,22 @@ class TestCliArgs:
             ],
         ):
             args = parse_args()
-            assert args.auto_detect is True
+            assert args.auto_detect is True  # Default
+            assert args.baseline is True  # Default
             assert args.dry_run is True
             assert args.output_dir == "/tmp/out"
             assert args.target_tps == 100.0
             assert args.target_accuracy == 0.9
             assert args.backend == "bnb"
             assert args.max_iters == 20
+
+    def test_no_baseline_flag(self):
+        """Should disable baseline with --no-baseline flag."""
+        from sintra.cli import parse_args
+
+        with patch.object(sys, "argv", ["sintra", "--no-baseline"]):
+            args = parse_args()
+            assert args.baseline is False
 
     def test_profile_with_flags(self):
         """Should accept profile with other flags."""
