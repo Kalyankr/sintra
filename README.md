@@ -9,9 +9,15 @@
 
 **Sintra** (Synthetic Intelligence for Targeted Runtime Architectures) is a fully autonomous agentic framework that optimizes Large Language Models for resource-constrained edge devices.
 
-[Quick Start](#-quick-start) • [Features](#-key-features) • [Architecture](#-agentic-architecture) • [Documentation](#-documentation)
+[Quick Start](#-quick-start) • [Features](#-key-features) • [Architecture](#-agentic-architecture)
 
 </div>
+
+---
+
+## 🎬 Demo
+
+[![asciicast](https://asciinema.org/a/XhbhTWJilEakysXB.svg)](https://asciinema.org/a/XhbhTWJilEakysXB)
 
 ---
 
