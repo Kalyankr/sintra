@@ -34,29 +34,29 @@ def download_and_quantize(
     layers_to_drop: Optional[list[int]] = None,
 ) -> str:
     """Download a model and quantize it with optional compression.
-    
+
     Args:
         model_id: HuggingFace model ID
         bits: Target quantization bits
         pruning_ratio: Fraction of weights to prune (0.0-1.0)
         layers_to_drop: Layer indices to remove
-        
+
     Returns:
         Path to the quantized GGUF file
     """
     # Import here to avoid circular imports and allow legacy mode without deps
-    from sintra.compression.downloader import ModelDownloader, DownloadError
+    from sintra.compression.downloader import DownloadError, ModelDownloader
     from sintra.compression.quantizer import GGUFQuantizer, QuantizationError
-    
+
     sys.stderr.write(f"Worker: Downloading {model_id}...\n")
-    
+
     # Download model
     downloader = ModelDownloader()
     try:
         model_path = downloader.download(model_id)
     except DownloadError as e:
         raise RuntimeError(f"Download failed: {e}")
-    
+
     # Log compression settings
     compression_info = f"{bits}-bit"
     if pruning_ratio > 0:
@@ -64,12 +64,12 @@ def download_and_quantize(
     if layers_to_drop:
         compression_info += f", dropping {len(layers_to_drop)} layers"
     sys.stderr.write(f"Worker: Compressing to {compression_info}...\n")
-    
+
     # Quantize with optional pruning/layer dropping
     quantizer = GGUFQuantizer()
     try:
         model_name = model_id.split("/")[-1].lower()
-        
+
         # Use the new compression-aware quantization
         if pruning_ratio > 0 or layers_to_drop:
             quantized_path = quantizer.quantize_with_compression(
@@ -81,7 +81,7 @@ def download_and_quantize(
             )
         else:
             quantized_path = quantizer.quantize(model_path, bits, model_name)
-        
+
         return str(quantized_path)
     except QuantizationError as e:
         raise RuntimeError(f"Quantization failed: {e}")
@@ -92,24 +92,24 @@ def quantize_with_bnb(
     bits: int,
 ) -> str:
     """Quantize using BitsAndBytes (GPU-accelerated NF4/INT8).
-    
+
     Args:
         model_id: HuggingFace model ID
         bits: Target quantization bits (4 or 8)
-        
+
     Returns:
         Path to the quantized model directory
     """
     from sintra.compression.bnb_quantizer import (
-        BitsAndBytesQuantizer, 
-        BnBQuantType,
         BitsAndBytesError,
+        BitsAndBytesQuantizer,
+        BnBQuantType,
     )
-    
+
     sys.stderr.write(f"Worker [BnB]: Quantizing {model_id} to {bits}-bit...\n")
-    
+
     quant_type = BnBQuantType.NF4 if bits == 4 else BnBQuantType.INT8
-    
+
     try:
         quantizer = BitsAndBytesQuantizer()
         output_path = quantizer.quantize(
@@ -128,11 +128,11 @@ def quantize_with_onnx(
     bits: int,
 ) -> str:
     """Quantize using ONNX/Optimum.
-    
+
     Args:
         model_id: HuggingFace model ID
         bits: Target quantization bits (8 for INT8)
-        
+
     Returns:
         Path to the quantized ONNX model directory
     """
@@ -140,12 +140,12 @@ def quantize_with_onnx(
         ONNXOptimizer,
         ONNXOptimizerError,
     )
-    
+
     sys.stderr.write(f"Worker [ONNX]: Exporting and optimizing {model_id}...\n")
-    
+
     try:
         optimizer = ONNXOptimizer()
-        
+
         # Export and optimize, optionally quantize
         apply_quant = bits <= 8  # ONNX supports INT8
         output_path = optimizer.export_and_optimize(
@@ -160,15 +160,16 @@ def quantize_with_onnx(
 
 def evaluate_accuracy(model_path: str) -> float:
     """Evaluate model accuracy using perplexity.
-    
+
     Args:
         model_path: Path to GGUF model
-        
+
     Returns:
         Accuracy score (0-1)
     """
     try:
         from sintra.compression.evaluator import AccuracyEvaluator
+
         evaluator = AccuracyEvaluator()
         return evaluator.evaluate_quick(Path(model_path))
     except Exception as e:
@@ -177,60 +178,64 @@ def evaluate_accuracy(model_path: str) -> float:
 
 
 def run_transformers_benchmark(
-    model_path: str, 
+    model_path: str,
     backend: str,
 ) -> ExperimentResult:
     """Run benchmark on a transformers/ONNX model.
-    
+
     Args:
         model_path: Path to the model directory
         backend: Backend type ('bnb' or 'onnx')
-        
+
     Returns:
         ExperimentResult with measured metrics
     """
     import torch
-    
+
     process = psutil.Process()
     start_mem = process.memory_info().rss
-    
-    sys.stderr.write(f"Worker [{backend.upper()}]: Loading model from {model_path}...\n")
+
+    sys.stderr.write(
+        f"Worker [{backend.upper()}]: Loading model from {model_path}...\n"
+    )
     start_time = time.time()
-    
+
     try:
         if backend == "bnb":
             from transformers import AutoModelForCausalLM, AutoTokenizer
-            
+
             model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
             )
             tokenizer = AutoTokenizer.from_pretrained(model_path)
-            
+
         elif backend == "onnx":
             from optimum.onnxruntime import ORTModelForCausalLM
             from transformers import AutoTokenizer
-            
+
             model = ORTModelForCausalLM.from_pretrained(model_path)
             tokenizer = AutoTokenizer.from_pretrained(model_path)
         else:
             raise ValueError(f"Unknown backend: {backend}")
-        
+
         load_time = time.time() - start_time
-        sys.stderr.write(f"Worker [{backend.upper()}]: Model loaded in {load_time:.1f}s\n")
-        
+        sys.stderr.write(
+            f"Worker [{backend.upper()}]: Model loaded in {load_time:.1f}s\n"
+        )
+
         # Run generation benchmark
         sys.stderr.write(f"Worker [{backend.upper()}]: Running TPS benchmark...\n")
-        
+
         prompt = "Q: What is the capital of France? A:"
         inputs = tokenizer(prompt, return_tensors="pt")
-        
+
         # Move inputs to same device as model (for BnB)
         if backend == "bnb" and hasattr(model, "device"):
             inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        
+
         gen_start = time.time()
-        
+
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
@@ -239,30 +244,30 @@ def run_transformers_benchmark(
                 temperature=0.5,
                 pad_token_id=tokenizer.eos_token_id,
             )
-        
+
         gen_end = time.time()
-        
+
         # Calculate metrics
         tokens_generated = outputs.shape[1] - inputs["input_ids"].shape[1]
         duration = gen_end - gen_start
         actual_tps = tokens_generated / duration if duration > 0 else 0
-        
+
         # Memory usage
         peak_mem = process.memory_info().rss
         actual_vram = peak_mem / (1024**3)
-        
+
         # For GPU memory (more accurate for BnB)
         if backend == "bnb" and torch.cuda.is_available():
             actual_vram = torch.cuda.max_memory_allocated() / (1024**3)
-        
+
         # Accuracy estimate (full eval would require perplexity computation)
         accuracy = 0.85  # Placeholder
-        
+
         sys.stderr.write(
             f"Worker [{backend.upper()}]: TPS={actual_tps:.2f}, "
             f"VRAM={actual_vram:.2f}GB, Acc={accuracy:.2f}\n"
         )
-        
+
         return ExperimentResult(
             actual_tps=round(actual_tps, 2),
             actual_vram_usage=round(actual_vram, 2),
@@ -270,7 +275,7 @@ def run_transformers_benchmark(
             was_successful=True,
             error_log="",
         )
-        
+
     except Exception as e:
         sys.stderr.write(f"Worker [{backend.upper()}]: Benchmark failed: {e}\n")
         return ExperimentResult(
@@ -282,22 +287,24 @@ def run_transformers_benchmark(
         )
 
 
-def run_benchmark(model_path: str, evaluate_accuracy_flag: bool = True) -> ExperimentResult:
+def run_benchmark(
+    model_path: str, evaluate_accuracy_flag: bool = True
+) -> ExperimentResult:
     """Run benchmark on a GGUF model.
-    
+
     Args:
         model_path: Path to the GGUF model file
         evaluate_accuracy_flag: Whether to run accuracy evaluation
-        
+
     Returns:
         ExperimentResult with measured metrics
     """
     process = psutil.Process()
     start_mem = process.memory_info().rss
-    
+
     sys.stderr.write(f"Worker: Loading model from {model_path}...\n")
     start_time = time.time()
-    
+
     # Load model
     llm = Llama(
         model_path=model_path,
@@ -306,40 +313,42 @@ def run_benchmark(model_path: str, evaluate_accuracy_flag: bool = True) -> Exper
         n_gpu_layers=-1 if sys.platform == "darwin" else 0,
         verbose=False,
     )
-    
+
     load_time = time.time() - start_time
     sys.stderr.write(f"Worker: Model loaded in {load_time:.1f}s\n")
-    
+
     # Run generation benchmark
     sys.stderr.write("Worker: Running TPS benchmark...\n")
     gen_start = time.time()
-    
+
     output = llm(
         "Q: What is the capital of France? A:",
         max_tokens=100,
         temperature=0.5,
     )
-    
+
     gen_end = time.time()
-    
+
     # Calculate metrics
     tokens_generated = output["usage"]["completion_tokens"]
     duration = gen_end - gen_start
     actual_tps = tokens_generated / duration if duration > 0 else 0
-    
+
     # Memory usage
     peak_mem = process.memory_info().rss
     actual_vram = peak_mem / (1024**3)
-    
+
     # Accuracy (optional, adds latency)
     if evaluate_accuracy_flag:
         sys.stderr.write("Worker: Evaluating accuracy...\n")
         accuracy = evaluate_accuracy(model_path)
     else:
         accuracy = 0.85  # Estimate
-    
-    sys.stderr.write(f"Worker: TPS={actual_tps:.2f}, VRAM={actual_vram:.2f}GB, Acc={accuracy:.2f}\n")
-    
+
+    sys.stderr.write(
+        f"Worker: TPS={actual_tps:.2f}, VRAM={actual_vram:.2f}GB, Acc={accuracy:.2f}\n"
+    )
+
     return ExperimentResult(
         actual_tps=round(actual_tps, 2),
         actual_vram_usage=round(actual_vram, 2),
@@ -351,21 +360,21 @@ def run_benchmark(model_path: str, evaluate_accuracy_flag: bool = True) -> Exper
 
 def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
     """Perform the full compression and benchmarking pipeline.
-    
+
     This function orchestrates:
     1. Downloading the model from HuggingFace
     2. Applying compression using the selected backend
     3. Running the benchmark
     4. Measuring accuracy
-    
+
     Supported backends:
     - gguf (default): llama.cpp GGUF format, CPU/Metal optimized
     - bnb: BitsAndBytes NF4/INT8, GPU-accelerated
     - onnx: ONNX Runtime via Optimum, multi-platform
-    
+
     Args:
         recipe: The compression recipe to apply (includes bits, pruning_ratio, layers_to_drop)
-        
+
     Returns:
         ExperimentResult with all measured metrics
     """
@@ -373,22 +382,22 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
         # Get configuration from environment
         model_id = os.environ.get(MODEL_ID_ENV)
         backend = os.environ.get(BACKEND_ENV, "gguf").lower()
-        
+
         if not model_id:
             raise ValueError(
                 "SINTRA_MODEL_ID environment variable not set. "
                 "Use --model-id to specify the model to optimize."
             )
-        
+
         sys.stderr.write(
             f"Worker: Recipe - bits={recipe.bits}, "
             f"pruning={recipe.pruning_ratio:.1%}, "
             f"layers_to_drop={recipe.layers_to_drop}, "
             f"backend={backend}\n"
         )
-        
+
         model_path: Optional[str] = None
-        
+
         # Route to appropriate backend
         if backend == "bnb":
             # BitsAndBytes: GPU-accelerated NF4/INT8
@@ -398,7 +407,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
                     "Pruning/layer dropping not yet supported.\n"
                 )
             model_path = quantize_with_bnb(model_id, recipe.bits)
-            
+
         elif backend == "onnx":
             # ONNX/Optimum: Multi-platform via ONNX Runtime
             if recipe.pruning_ratio > 0 or recipe.layers_to_drop:
@@ -407,7 +416,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
                     "Pruning/layer dropping not yet supported.\n"
                 )
             model_path = quantize_with_onnx(model_id, recipe.bits)
-            
+
         else:
             # GGUF (default): llama.cpp with full compression pipeline
             model_path = download_and_quantize(
@@ -416,13 +425,13 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
                 pruning_ratio=recipe.pruning_ratio,
                 layers_to_drop=recipe.layers_to_drop if recipe.layers_to_drop else None,
             )
-        
+
         # Run benchmark
         if backend in ("bnb", "onnx"):
             return run_transformers_benchmark(model_path, backend)
         else:
             return run_benchmark(model_path, evaluate_accuracy_flag=True)
-        
+
     except Exception as e:
         return ExperimentResult(
             actual_tps=0,
@@ -435,7 +444,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
 
 def main():
     """Worker entry point.
-    
+
     Reads ModelRecipe from stdin, performs surgery, outputs ExperimentResult.
     """
     try:
@@ -450,7 +459,7 @@ def main():
         recipe = ModelRecipe.model_validate(recipe_dict)
 
         sys.stderr.write(f"Worker: Starting {recipe.bits}-bit surgery...\n")
-        
+
         # Perform surgery
         result = perform_surgery(recipe)
 

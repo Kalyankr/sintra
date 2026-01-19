@@ -9,9 +9,7 @@ from langchain_openai import ChatOpenAI
 from sintra.profiles.models import LLMConfig, LLMProvider, ModelRecipe
 
 # Type alias for LLM with structured output
-StructuredLLM = Union[
-    ChatOpenAI, ChatAnthropic, ChatGoogleGenerativeAI, "ChatOllama"
-]
+StructuredLLM = Union[ChatOpenAI, ChatAnthropic, ChatGoogleGenerativeAI, "ChatOllama"]
 
 # Map providers to their required environment variables
 PROVIDER_API_KEYS = {
@@ -23,18 +21,19 @@ PROVIDER_API_KEYS = {
 
 class MissingAPIKeyError(Exception):
     """Raised when a required API key is not set."""
+
     pass
 
 
 def _get_base_llm(config: LLMConfig) -> BaseChatModel:
     """Returns a base LLM instance without structured output binding.
-    
+
     Args:
         config: LLM configuration with provider, model name, and temperature.
-    
+
     Returns:
         A base LLM instance.
-    
+
     Raises:
         MissingAPIKeyError: If the required API key is not set.
         ValueError: If the provider is not supported.
@@ -63,6 +62,7 @@ def _get_base_llm(config: LLMConfig) -> BaseChatModel:
 
     elif config.provider == LLMProvider.OLLAMA:
         from langchain_ollama import ChatOllama
+
         return ChatOllama(
             model=config.model_name,
             temperature=config.temperature,
@@ -76,13 +76,13 @@ def _get_base_llm(config: LLMConfig) -> BaseChatModel:
 
 def get_architect_llm(config: LLMConfig) -> StructuredLLM:
     """Returns an LLM instance with structured output capabilities.
-    
+
     Args:
         config: LLM configuration with provider, model name, and temperature.
-    
+
     Returns:
         An LLM instance bound to ModelRecipe schema for structured output.
-    
+
     Raises:
         MissingAPIKeyError: If the required API key is not set.
         ValueError: If the provider is not supported.
@@ -94,14 +94,14 @@ def get_architect_llm(config: LLMConfig) -> StructuredLLM:
 
 def get_tool_enabled_llm(config: LLMConfig, tools: List) -> BaseChatModel:
     """Returns an LLM instance with tool-calling capabilities.
-    
+
     Args:
         config: LLM configuration with provider, model name, and temperature.
         tools: List of tools to bind to the LLM.
-    
+
     Returns:
         An LLM instance with tools bound.
-    
+
     Raises:
         MissingAPIKeyError: If the required API key is not set.
         ValueError: If the provider is not supported.
@@ -112,13 +112,13 @@ def get_tool_enabled_llm(config: LLMConfig, tools: List) -> BaseChatModel:
 
 def get_critic_llm(config: LLMConfig) -> BaseChatModel:
     """Returns an LLM instance for the critic agent.
-    
+
     The critic uses a simpler interface without structured output
     to provide free-form feedback and routing decisions.
-    
+
     Args:
         config: LLM configuration with provider, model name, and temperature.
-    
+
     Returns:
         A base LLM instance for critic reasoning.
     """

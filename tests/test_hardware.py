@@ -104,10 +104,13 @@ class TestAutoDetectHardware:
     def test_returns_hardware_profile(self):
         """Should return a valid HardwareProfile."""
         profile = auto_detect_hardware()
-        
+
         assert profile.name.startswith("Auto-detected:")
         assert profile.constraints.vram_gb > 0
-        assert profile.constraints.cpu_arch in ["arm64", "x86_64", "arm"] or len(profile.constraints.cpu_arch) > 0
+        assert (
+            profile.constraints.cpu_arch in ["arm64", "x86_64", "arm"]
+            or len(profile.constraints.cpu_arch) > 0
+        )
         assert isinstance(profile.constraints.has_cuda, bool)
         assert profile.targets.min_tokens_per_second > 0
         assert profile.targets.min_accuracy_score > 0
@@ -119,26 +122,32 @@ class TestAutoDetectHardware:
             target_accuracy=0.9,
             max_latency_ms=50.0,
         )
-        
+
         assert profile.targets.min_tokens_per_second == 100.0
         assert profile.targets.min_accuracy_score == 0.9
         assert profile.targets.max_latency_ms == 50.0
 
     def test_auto_calculates_latency_for_high_vram(self):
         """Should calculate lower latency for high-VRAM systems."""
-        with patch("sintra.profiles.hardware.detect_available_memory_gb", return_value=32.0):
+        with patch(
+            "sintra.profiles.hardware.detect_available_memory_gb", return_value=32.0
+        ):
             profile = auto_detect_hardware()
             assert profile.targets.max_latency_ms == 200.0
 
     def test_auto_calculates_latency_for_medium_vram(self):
         """Should calculate medium latency for medium-VRAM systems."""
-        with patch("sintra.profiles.hardware.detect_available_memory_gb", return_value=10.0):
+        with patch(
+            "sintra.profiles.hardware.detect_available_memory_gb", return_value=10.0
+        ):
             profile = auto_detect_hardware()
             assert profile.targets.max_latency_ms == 500.0
 
     def test_auto_calculates_latency_for_low_vram(self):
         """Should calculate higher latency for low-VRAM systems."""
-        with patch("sintra.profiles.hardware.detect_available_memory_gb", return_value=4.0):
+        with patch(
+            "sintra.profiles.hardware.detect_available_memory_gb", return_value=4.0
+        ):
             profile = auto_detect_hardware()
             assert profile.targets.max_latency_ms == 1000.0
 
@@ -157,7 +166,7 @@ class TestGetGpuVramGb:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout="8192\n"  # 8GB in MB
+                stdout="8192\n",  # 8GB in MB
             )
             result = get_gpu_vram_gb()
             assert result == 8.0
@@ -167,7 +176,7 @@ class TestGetGpuVramGb:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
                 returncode=0,
-                stdout="8192\n8192\n"  # Two 8GB GPUs
+                stdout="8192\n8192\n",  # Two 8GB GPUs
             )
             result = get_gpu_vram_gb()
             assert result == 16.0
@@ -225,12 +234,12 @@ class TestSaveProfileToYaml:
         """Should save a valid YAML file."""
         profile = auto_detect_hardware()
         yaml_path = tmp_path / "test_profile.yaml"
-        
+
         result = save_profile_to_yaml(profile, yaml_path)
-        
+
         assert result == yaml_path
         assert yaml_path.exists()
-        
+
         # Verify it can be read back
         content = yaml_path.read_text()
         assert "name:" in content
@@ -241,9 +250,9 @@ class TestSaveProfileToYaml:
         """Should include helpful header comments."""
         profile = auto_detect_hardware()
         yaml_path = tmp_path / "test_profile.yaml"
-        
+
         save_profile_to_yaml(profile, yaml_path)
         content = yaml_path.read_text()
-        
+
         assert "# Auto-detected hardware profile" in content
         assert "sintra --auto-detect" in content

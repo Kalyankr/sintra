@@ -7,8 +7,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from huggingface_hub import snapshot_download, HfApi
-from huggingface_hub.utils import RepositoryNotFoundError, GatedRepoError
+from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub.utils import GatedRepoError, RepositoryNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -18,24 +18,25 @@ DEFAULT_CACHE_DIR = Path.home() / ".cache" / "sintra"
 
 class DownloadError(Exception):
     """Raised when model download fails."""
+
     pass
 
 
 class ModelDownloader:
     """Downloads and caches HuggingFace models.
-    
+
     Models are cached in ~/.cache/sintra/downloads/ to avoid re-downloading.
-    
+
     Example:
         >>> downloader = ModelDownloader()
         >>> path = downloader.download("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
         >>> print(path)
         /home/user/.cache/sintra/downloads/TinyLlama--TinyLlama-1.1B-Chat-v1.0
     """
-    
+
     def __init__(self, cache_dir: Optional[Path] = None):
         """Initialize the downloader.
-        
+
         Args:
             cache_dir: Base cache directory. Defaults to ~/.cache/sintra/
         """
@@ -43,7 +44,7 @@ class ModelDownloader:
         self.downloads_dir = self.cache_dir / "downloads"
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
         self._api = HfApi()
-    
+
     def download(
         self,
         model_id: str,
@@ -51,29 +52,29 @@ class ModelDownloader:
         token: Optional[str] = None,
     ) -> Path:
         """Download a model from HuggingFace Hub.
-        
+
         Args:
             model_id: HuggingFace model ID (e.g., "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
             revision: Git revision (branch, tag, or commit hash)
             token: HuggingFace token for gated models
-            
+
         Returns:
             Path to the downloaded model directory
-            
+
         Raises:
             DownloadError: If download fails (not found, gated, network error)
         """
         logger.info(f"Downloading model: {model_id}")
-        
+
         # Convert model_id to safe directory name
         safe_name = model_id.replace("/", "--")
         local_dir = self.downloads_dir / safe_name
-        
+
         # Check if already downloaded
         if self._is_complete_download(local_dir):
             logger.info(f"Model already cached at {local_dir}")
             return local_dir
-        
+
         try:
             snapshot_download(
                 repo_id=model_id,
@@ -83,14 +84,14 @@ class ModelDownloader:
                 # Only download model weights, skip large unnecessary files
                 ignore_patterns=[
                     "*.md",
-                    "*.txt", 
+                    "*.txt",
                     ".gitattributes",
                     "original/",  # Skip original pytorch bins if safetensors exist
                 ],
             )
             logger.info(f"Downloaded to {local_dir}")
             return local_dir
-            
+
         except RepositoryNotFoundError:
             raise DownloadError(
                 f"Model '{model_id}' not found on HuggingFace Hub. "
@@ -104,27 +105,27 @@ class ModelDownloader:
             )
         except Exception as e:
             raise DownloadError(f"Failed to download '{model_id}': {e}") from e
-    
+
     def _is_complete_download(self, path: Path) -> bool:
         """Check if a model is fully downloaded.
-        
+
         Verifies config.json and at least one weight file exists.
         """
         if not path.exists():
             return False
-        
+
         has_config = (path / "config.json").exists()
         has_weights = (
-            list(path.glob("*.safetensors")) or
-            list(path.glob("*.bin")) or
-            list(path.glob("*.pt"))
+            list(path.glob("*.safetensors"))
+            or list(path.glob("*.bin"))
+            or list(path.glob("*.pt"))
         )
-        
+
         return has_config and bool(has_weights)
-    
+
     def get_model_info(self, model_id: str) -> dict:
         """Get model metadata from HuggingFace Hub.
-        
+
         Returns:
             Dict with model info (downloads, likes, tags, etc.)
         """
@@ -140,7 +141,7 @@ class ModelDownloader:
         except Exception as e:
             logger.warning(f"Could not fetch model info: {e}")
             return {}
-    
+
     def list_cached_models(self) -> list[Path]:
         """List all models in the cache."""
         if not self.downloads_dir.exists():
@@ -154,12 +155,12 @@ def download_model(
     token: Optional[str] = None,
 ) -> Path:
     """Convenience function to download a model.
-    
+
     Args:
         model_id: HuggingFace model ID
         cache_dir: Optional cache directory
         token: Optional HuggingFace token
-        
+
     Returns:
         Path to downloaded model
     """

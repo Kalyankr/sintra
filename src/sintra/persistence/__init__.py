@@ -13,14 +13,13 @@ from typing import Generator, Optional
 
 from sintra.profiles.models import ExperimentResult, HardwareProfile, ModelRecipe
 
-
 # Default database location
 DEFAULT_DB_PATH = Path.home() / ".sintra" / "history.db"
 
 
 class ExperimentRecord:
     """A record of a single optimization experiment."""
-    
+
     def __init__(
         self,
         id: Optional[int],
@@ -42,7 +41,7 @@ class ExperimentRecord:
         self.backend = backend
         self.created_at = created_at
         self.iteration = iteration
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
@@ -60,28 +59,28 @@ class ExperimentRecord:
 
 class HistoryDB:
     """SQLite database for experiment history.
-    
+
     Provides persistent storage for:
     - Past experiments (recipes + results)
     - Run metadata (hardware, model, timestamps)
     - Query capabilities for learning from history
-    
+
     Example:
         >>> db = HistoryDB()
         >>> db.save_experiment(run_id, model_id, hardware, recipe, result, backend)
         >>> similar = db.find_similar_experiments(model_id, hardware_name)
     """
-    
+
     def __init__(self, db_path: Optional[Path] = None):
         """Initialize the database.
-        
+
         Args:
             db_path: Path to SQLite database. Defaults to ~/.sintra/history.db
         """
         self.db_path = db_path or DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
-    
+
     @contextmanager
     def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get a database connection with proper cleanup."""
@@ -91,7 +90,7 @@ class HistoryDB:
             yield conn
         finally:
             conn.close()
-    
+
     def _init_db(self) -> None:
         """Initialize database schema."""
         with self._get_connection() as conn:
@@ -152,7 +151,7 @@ class HistoryDB:
                     ON runs(status);
             """)
             conn.commit()
-    
+
     def save_experiment(
         self,
         run_id: str,
@@ -164,7 +163,7 @@ class HistoryDB:
         iteration: int = 0,
     ) -> int:
         """Save an experiment to the database.
-        
+
         Args:
             run_id: Unique identifier for this optimization run
             model_id: HuggingFace model ID
@@ -173,38 +172,41 @@ class HistoryDB:
             result: The benchmark result
             backend: Quantization backend used
             iteration: Iteration number within the run
-            
+
         Returns:
             The database ID of the saved experiment
         """
         with self._get_connection() as conn:
-            cursor = conn.execute("""
+            cursor = conn.execute(
+                """
                 INSERT INTO experiments (
                     run_id, model_id, hardware_name, backend, iteration,
                     bits, pruning_ratio, layers_to_drop, method,
                     actual_tps, actual_vram_usage, accuracy_score, 
                     was_successful, error_log, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                run_id,
-                model_id,
-                hardware_name,
-                backend,
-                iteration,
-                recipe.bits,
-                recipe.pruning_ratio,
-                json.dumps(recipe.layers_to_drop),
-                recipe.method,
-                result.actual_tps,
-                result.actual_vram_usage,
-                result.accuracy_score,
-                1 if result.was_successful else 0,
-                result.error_log,
-                datetime.now().isoformat(),
-            ))
+            """,
+                (
+                    run_id,
+                    model_id,
+                    hardware_name,
+                    backend,
+                    iteration,
+                    recipe.bits,
+                    recipe.pruning_ratio,
+                    json.dumps(recipe.layers_to_drop),
+                    recipe.method,
+                    result.actual_tps,
+                    result.actual_vram_usage,
+                    result.accuracy_score,
+                    1 if result.was_successful else 0,
+                    result.error_log,
+                    datetime.now().isoformat(),
+                ),
+            )
             conn.commit()
             return cursor.lastrowid or 0
-    
+
     def start_run(
         self,
         run_id: str,
@@ -213,7 +215,7 @@ class HistoryDB:
         backend: str,
     ) -> None:
         """Record the start of an optimization run.
-        
+
         Args:
             run_id: Unique identifier for this run
             model_id: HuggingFace model ID
@@ -221,21 +223,24 @@ class HistoryDB:
             backend: Quantization backend
         """
         with self._get_connection() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO runs (
                     run_id, model_id, hardware_name, hardware_profile,
                     backend, started_at, status
                 ) VALUES (?, ?, ?, ?, ?, ?, 'running')
-            """, (
-                run_id,
-                model_id,
-                profile.name,
-                profile.model_dump_json(),
-                backend,
-                datetime.now().isoformat(),
-            ))
+            """,
+                (
+                    run_id,
+                    model_id,
+                    profile.name,
+                    profile.model_dump_json(),
+                    backend,
+                    datetime.now().isoformat(),
+                ),
+            )
             conn.commit()
-    
+
     def finish_run(
         self,
         run_id: str,
@@ -245,7 +250,7 @@ class HistoryDB:
         status: str = "completed",
     ) -> None:
         """Record the completion of an optimization run.
-        
+
         Args:
             run_id: The run identifier
             final_iteration: Last iteration completed
@@ -254,7 +259,8 @@ class HistoryDB:
             status: Final status (completed, failed, interrupted)
         """
         with self._get_connection() as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE runs SET
                     finished_at = ?,
                     final_iteration = ?,
@@ -262,16 +268,18 @@ class HistoryDB:
                     best_recipe = ?,
                     status = ?
                 WHERE run_id = ?
-            """, (
-                datetime.now().isoformat(),
-                final_iteration,
-                1 if is_converged else 0,
-                best_recipe.model_dump_json() if best_recipe else None,
-                status,
-                run_id,
-            ))
+            """,
+                (
+                    datetime.now().isoformat(),
+                    final_iteration,
+                    1 if is_converged else 0,
+                    best_recipe.model_dump_json() if best_recipe else None,
+                    status,
+                    run_id,
+                ),
+            )
             conn.commit()
-    
+
     def find_similar_experiments(
         self,
         model_id: str,
@@ -280,13 +288,13 @@ class HistoryDB:
         limit: int = 50,
     ) -> list[ExperimentRecord]:
         """Find experiments similar to the current setup.
-        
+
         Args:
             model_id: HuggingFace model ID to match
             hardware_name: Optional hardware profile to match
             successful_only: Only return successful experiments
             limit: Maximum number of results
-            
+
         Returns:
             List of matching experiment records
         """
@@ -295,67 +303,70 @@ class HistoryDB:
             WHERE model_id = ?
         """
         params: list = [model_id]
-        
+
         if hardware_name:
             query += " AND hardware_name = ?"
             params.append(hardware_name)
-        
+
         if successful_only:
             query += " AND was_successful = 1"
-        
+
         query += " ORDER BY created_at DESC LIMIT ?"
         params.append(limit)
-        
+
         with self._get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
-        
+
         return [self._row_to_record(row) for row in rows]
-    
+
     def get_best_recipe_for_hardware(
         self,
         model_id: str,
         hardware_name: str,
     ) -> Optional[tuple[ModelRecipe, ExperimentResult]]:
         """Get the best successful recipe for a model/hardware combo.
-        
+
         "Best" = highest accuracy among successful experiments.
-        
+
         Args:
             model_id: HuggingFace model ID
             hardware_name: Hardware profile name
-            
+
         Returns:
             Tuple of (recipe, result) or None if no successful experiments
         """
         with self._get_connection() as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 SELECT * FROM experiments
                 WHERE model_id = ? 
                   AND hardware_name = ?
                   AND was_successful = 1
                 ORDER BY accuracy_score DESC
                 LIMIT 1
-            """, (model_id, hardware_name)).fetchone()
-        
+            """,
+                (model_id, hardware_name),
+            ).fetchone()
+
         if row is None:
             return None
-        
+
         record = self._row_to_record(row)
         return (record.recipe, record.result)
-    
+
     def get_failed_recipes(
         self,
         model_id: str,
         hardware_name: Optional[str] = None,
     ) -> list[ModelRecipe]:
         """Get recipes that failed for a model/hardware combo.
-        
+
         Useful for avoiding repeated failures.
-        
+
         Args:
             model_id: HuggingFace model ID
             hardware_name: Optional hardware profile name
-            
+
         Returns:
             List of recipes that failed
         """
@@ -365,14 +376,14 @@ class HistoryDB:
             WHERE model_id = ? AND was_successful = 0
         """
         params: list = [model_id]
-        
+
         if hardware_name:
             query += " AND hardware_name = ?"
             params.append(hardware_name)
-        
+
         with self._get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
-        
+
         return [
             ModelRecipe(
                 bits=row["bits"],
@@ -382,13 +393,13 @@ class HistoryDB:
             )
             for row in rows
         ]
-    
+
     def get_run(self, run_id: str) -> Optional[dict]:
         """Get run metadata by ID.
-        
+
         Args:
             run_id: The run identifier
-            
+
         Returns:
             Run metadata dict or None
         """
@@ -396,33 +407,36 @@ class HistoryDB:
             row = conn.execute(
                 "SELECT * FROM runs WHERE run_id = ?", (run_id,)
             ).fetchone()
-        
+
         if row is None:
             return None
-        
+
         return dict(row)
-    
+
     def get_experiments_for_run(self, run_id: str) -> list[ExperimentRecord]:
         """Get all experiments for a specific run.
-        
+
         Args:
             run_id: The run identifier
-            
+
         Returns:
             List of experiments in iteration order
         """
         with self._get_connection() as conn:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT * FROM experiments
                 WHERE run_id = ?
                 ORDER BY iteration ASC
-            """, (run_id,)).fetchall()
-        
+            """,
+                (run_id,),
+            ).fetchall()
+
         return [self._row_to_record(row) for row in rows]
-    
+
     def get_incomplete_runs(self) -> list[dict]:
         """Get runs that didn't complete (for potential resume).
-        
+
         Returns:
             List of incomplete run metadata dicts
         """
@@ -432,32 +446,28 @@ class HistoryDB:
                 WHERE status = 'running'
                 ORDER BY started_at DESC
             """).fetchall()
-        
+
         return [dict(row) for row in rows]
-    
+
     def get_statistics(self) -> dict:
         """Get overall statistics about experiment history.
-        
+
         Returns:
             Dictionary with stats about experiments and runs
         """
         with self._get_connection() as conn:
-            exp_count = conn.execute(
-                "SELECT COUNT(*) FROM experiments"
-            ).fetchone()[0]
-            
+            exp_count = conn.execute("SELECT COUNT(*) FROM experiments").fetchone()[0]
+
             success_count = conn.execute(
                 "SELECT COUNT(*) FROM experiments WHERE was_successful = 1"
             ).fetchone()[0]
-            
-            run_count = conn.execute(
-                "SELECT COUNT(*) FROM runs"
-            ).fetchone()[0]
-            
+
+            run_count = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+
             model_count = conn.execute(
                 "SELECT COUNT(DISTINCT model_id) FROM experiments"
             ).fetchone()[0]
-        
+
         return {
             "total_experiments": exp_count,
             "successful_experiments": success_count,
@@ -465,7 +475,7 @@ class HistoryDB:
             "total_runs": run_count,
             "unique_models": model_count,
         }
-    
+
     def _row_to_record(self, row: sqlite3.Row) -> ExperimentRecord:
         """Convert a database row to an ExperimentRecord."""
         recipe = ModelRecipe(
@@ -474,7 +484,7 @@ class HistoryDB:
             layers_to_drop=json.loads(row["layers_to_drop"]),
             method=row["method"],
         )
-        
+
         result = ExperimentResult(
             actual_tps=row["actual_tps"],
             actual_vram_usage=row["actual_vram_usage"],
@@ -482,7 +492,7 @@ class HistoryDB:
             was_successful=bool(row["was_successful"]),
             error_log=row["error_log"],
         )
-        
+
         return ExperimentRecord(
             id=row["id"],
             run_id=row["run_id"],
@@ -502,10 +512,10 @@ _global_db: Optional[HistoryDB] = None
 
 def get_history_db(db_path: Optional[Path] = None) -> HistoryDB:
     """Get the global history database instance.
-    
+
     Args:
         db_path: Optional custom database path
-        
+
     Returns:
         The HistoryDB instance
     """
@@ -521,23 +531,21 @@ def format_history_from_db(
     limit: int = 10,
 ) -> str:
     """Format experiment history from DB for LLM context.
-    
+
     Args:
         model_id: HuggingFace model ID
         hardware_name: Hardware profile name
         limit: Max experiments to include
-        
+
     Returns:
         Formatted string for LLM prompt
     """
     db = get_history_db()
-    experiments = db.find_similar_experiments(
-        model_id, hardware_name, limit=limit
-    )
-    
+    experiments = db.find_similar_experiments(model_id, hardware_name, limit=limit)
+
     if not experiments:
         return "No previous experiments found for this model/hardware combo."
-    
+
     lines = ["Previous experiments from history:"]
     for exp in experiments:
         status = "✓" if exp.result.was_successful else "✗"
@@ -546,5 +554,5 @@ def format_history_from_db(
             f"layers_dropped={len(exp.recipe.layers_to_drop)} → "
             f"TPS={exp.result.actual_tps:.1f}, acc={exp.result.accuracy_score:.2f}"
         )
-    
+
     return "\n".join(lines)

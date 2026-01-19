@@ -199,9 +199,7 @@ class TestCriticRouter:
         route = critic_router(base_state)
         assert route == "reporter"
 
-    def test_routes_to_architect_with_no_history(
-        self, base_state: SintraState
-    ) -> None:
+    def test_routes_to_architect_with_no_history(self, base_state: SintraState) -> None:
         """Test routing to architect when history is empty."""
         base_state["use_debug"] = False
         base_state["history"] = []
@@ -228,9 +226,7 @@ class TestCriticRouter:
         route = critic_router(base_state)
         assert route == "architect"
 
-    def test_routes_to_reporter_when_targets_met(
-        self, base_state: SintraState
-    ) -> None:
+    def test_routes_to_reporter_when_targets_met(self, base_state: SintraState) -> None:
         """Test routing to reporter when all targets are met."""
         base_state["use_debug"] = False
         base_state["history"] = [

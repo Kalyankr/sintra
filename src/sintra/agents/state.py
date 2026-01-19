@@ -18,7 +18,7 @@ class SintraState(TypedDict):
 
     # Target model configuration
     target_model_id: str
-    
+
     # Backend configuration
     backend: str
 
@@ -44,15 +44,15 @@ class SintraState(TypedDict):
     # Execution modes
     use_debug: bool
     use_mock: bool
-    
+
     # Agentic features (ReAct pattern)
     use_react: bool  # Whether to use ReAct-style architect
     reasoning_chain: Optional[List[Any]]  # ReAct reasoning steps
     reasoning_summary: Optional[str]  # Human-readable reasoning summary
-    
+
     # Self-reflection
     reflection: Optional[Any]  # Reflection analysis from reflector node
     strategy_adjustments: Optional[List[Any]]  # Recommended strategy changes
-    
+
     # Planner
     optimization_plan: Optional[Any]  # OptimizationPlan from planner node

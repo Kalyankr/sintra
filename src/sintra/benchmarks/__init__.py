@@ -1,6 +1,10 @@
 """Sintra benchmarks module - Model execution and performance measurement."""
 
-from sintra.benchmarks.executor import BenchmarkExecutor, MockExecutor, StandaloneExecutor
+from sintra.benchmarks.executor import (
+    BenchmarkExecutor,
+    MockExecutor,
+    StandaloneExecutor,
+)
 
 __all__ = [
     "BenchmarkExecutor",

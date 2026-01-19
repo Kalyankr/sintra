@@ -12,7 +12,7 @@ class TestCliArgs:
     def test_profile_required_without_auto_detect(self):
         """Should require profile when --auto-detect not used."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra"]):
             with pytest.raises(SystemExit):
                 parse_args()
@@ -20,7 +20,7 @@ class TestCliArgs:
     def test_profile_optional_with_auto_detect(self):
         """Should not require profile when --auto-detect is used."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
             args = parse_args()
             assert args.auto_detect is True
@@ -29,15 +29,17 @@ class TestCliArgs:
     def test_output_dir_flag(self):
         """Should parse --output-dir flag."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--output-dir", "/tmp/models"]):
+
+        with patch.object(
+            sys, "argv", ["sintra", "--auto-detect", "--output-dir", "/tmp/models"]
+        ):
             args = parse_args()
             assert args.output_dir == "/tmp/models"
 
     def test_dry_run_flag(self):
         """Should parse --dry-run flag."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra", "--auto-detect", "--dry-run"]):
             args = parse_args()
             assert args.dry_run is True
@@ -45,23 +47,27 @@ class TestCliArgs:
     def test_target_tps_flag(self):
         """Should parse --target-tps flag."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--target-tps", "50.0"]):
+
+        with patch.object(
+            sys, "argv", ["sintra", "--auto-detect", "--target-tps", "50.0"]
+        ):
             args = parse_args()
             assert args.target_tps == 50.0
 
     def test_target_accuracy_flag(self):
         """Should parse --target-accuracy flag."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--target-accuracy", "0.8"]):
+
+        with patch.object(
+            sys, "argv", ["sintra", "--auto-detect", "--target-accuracy", "0.8"]
+        ):
             args = parse_args()
             assert args.target_accuracy == 0.8
 
     def test_default_values(self):
         """Should have sensible defaults."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
             args = parse_args()
             assert args.backend == "gguf"
@@ -74,17 +80,26 @@ class TestCliArgs:
     def test_all_flags_together(self):
         """Should handle all flags together."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", [
-            "sintra",
-            "--auto-detect",
-            "--dry-run",
-            "--output-dir", "/tmp/out",
-            "--target-tps", "100",
-            "--target-accuracy", "0.9",
-            "--backend", "bnb",
-            "--max-iters", "20",
-        ]):
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "sintra",
+                "--auto-detect",
+                "--dry-run",
+                "--output-dir",
+                "/tmp/out",
+                "--target-tps",
+                "100",
+                "--target-accuracy",
+                "0.9",
+                "--backend",
+                "bnb",
+                "--max-iters",
+                "20",
+            ],
+        ):
             args = parse_args()
             assert args.auto_detect is True
             assert args.dry_run is True
@@ -97,13 +112,18 @@ class TestCliArgs:
     def test_profile_with_flags(self):
         """Should accept profile with other flags."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", [
-            "sintra",
-            "profiles/test.yaml",
-            "--dry-run",
-            "--output-dir", "/tmp/out",
-        ]):
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "sintra",
+                "profiles/test.yaml",
+                "--dry-run",
+                "--output-dir",
+                "/tmp/out",
+            ],
+        ):
             args = parse_args()
             assert args.profile == "profiles/test.yaml"
             assert args.dry_run is True
@@ -112,7 +132,7 @@ class TestCliArgs:
     def test_resume_flag_latest(self):
         """Should parse --resume with no argument as 'latest'."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra", "--auto-detect", "--resume"]):
             args = parse_args()
             assert args.resume == "latest"
@@ -120,23 +140,27 @@ class TestCliArgs:
     def test_resume_flag_with_run_id(self):
         """Should parse --resume with a specific run_id."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--resume", "abc-123"]):
+
+        with patch.object(
+            sys, "argv", ["sintra", "--auto-detect", "--resume", "abc-123"]
+        ):
             args = parse_args()
             assert args.resume == "abc-123"
 
     def test_list_checkpoints_flag(self):
         """Should parse --list-checkpoints flag."""
         from sintra.cli import parse_args
-        
-        with patch.object(sys, "argv", ["sintra", "--auto-detect", "--list-checkpoints"]):
+
+        with patch.object(
+            sys, "argv", ["sintra", "--auto-detect", "--list-checkpoints"]
+        ):
             args = parse_args()
             assert args.list_checkpoints is True
 
     def test_resume_default_none(self):
         """Resume should default to None."""
         from sintra.cli import parse_args
-        
+
         with patch.object(sys, "argv", ["sintra", "--auto-detect"]):
             args = parse_args()
             assert args.resume is None

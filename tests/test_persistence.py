@@ -1,8 +1,8 @@
 """Tests for SQLite persistence module."""
 
 import tempfile
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 
@@ -81,10 +81,12 @@ class TestHistoryDB:
             backend="gguf",
             iteration=0,
         )
-        
+
         assert exp_id > 0
 
-    def test_find_similar_experiments(self, temp_db: HistoryDB, sample_recipe, sample_result):
+    def test_find_similar_experiments(
+        self, temp_db: HistoryDB, sample_recipe, sample_result
+    ):
         """Should find experiments for same model."""
         # Save an experiment
         temp_db.save_experiment(
@@ -95,15 +97,17 @@ class TestHistoryDB:
             result=sample_result,
             backend="gguf",
         )
-        
+
         # Find similar
         results = temp_db.find_similar_experiments("TinyLlama/TinyLlama-1.1B")
-        
+
         assert len(results) == 1
         assert results[0].recipe.bits == 4
         assert results[0].result.actual_tps == 25.5
 
-    def test_find_similar_filters_by_hardware(self, temp_db: HistoryDB, sample_recipe, sample_result):
+    def test_find_similar_filters_by_hardware(
+        self, temp_db: HistoryDB, sample_recipe, sample_result
+    ):
         """Should filter by hardware name."""
         # Save for Hardware A
         temp_db.save_experiment(
@@ -114,7 +118,7 @@ class TestHistoryDB:
             result=sample_result,
             backend="gguf",
         )
-        
+
         # Save for Hardware B
         temp_db.save_experiment(
             run_id="run-2",
@@ -124,13 +128,13 @@ class TestHistoryDB:
             result=sample_result,
             backend="gguf",
         )
-        
+
         # Find for Hardware A only
         results = temp_db.find_similar_experiments(
             "TinyLlama/TinyLlama-1.1B",
             hardware_name="Hardware A",
         )
-        
+
         assert len(results) == 1
         assert results[0].hardware_name == "Hardware A"
 
@@ -150,7 +154,7 @@ class TestHistoryDB:
             ),
             backend="gguf",
         )
-        
+
         # Save failed
         temp_db.save_experiment(
             run_id="run-2",
@@ -166,13 +170,13 @@ class TestHistoryDB:
             ),
             backend="gguf",
         )
-        
+
         # Find successful only
         results = temp_db.find_similar_experiments(
             "TinyLlama/TinyLlama-1.1B",
             successful_only=True,
         )
-        
+
         assert len(results) == 1
         assert results[0].result.was_successful is True
 
@@ -192,7 +196,7 @@ class TestHistoryDB:
             ),
             backend="gguf",
         )
-        
+
         # Save high accuracy
         temp_db.save_experiment(
             run_id="run-2",
@@ -207,11 +211,9 @@ class TestHistoryDB:
             ),
             backend="gguf",
         )
-        
-        best = temp_db.get_best_recipe_for_hardware(
-            "TinyLlama/TinyLlama-1.1B", "Test"
-        )
-        
+
+        best = temp_db.get_best_recipe_for_hardware("TinyLlama/TinyLlama-1.1B", "Test")
+
         assert best is not None
         recipe, result = best
         assert recipe.bits == 8
@@ -220,7 +222,7 @@ class TestHistoryDB:
     def test_get_failed_recipes(self, temp_db: HistoryDB):
         """Should return failed recipes."""
         failed_recipe = ModelRecipe(bits=2, pruning_ratio=0.5, method="GGUF")
-        
+
         temp_db.save_experiment(
             run_id="run-1",
             model_id="TinyLlama/TinyLlama-1.1B",
@@ -235,9 +237,9 @@ class TestHistoryDB:
             ),
             backend="gguf",
         )
-        
+
         failed = temp_db.get_failed_recipes("TinyLlama/TinyLlama-1.1B")
-        
+
         assert len(failed) == 1
         assert failed[0].bits == 2
         assert failed[0].pruning_ratio == 0.5
@@ -246,10 +248,12 @@ class TestHistoryDB:
 class TestRunManagement:
     """Tests for run start/finish tracking."""
 
-    def test_start_and_finish_run(self, temp_db: HistoryDB, sample_profile, sample_recipe):
+    def test_start_and_finish_run(
+        self, temp_db: HistoryDB, sample_profile, sample_recipe
+    ):
         """Should track run lifecycle."""
         run_id = "test-run-123"
-        
+
         # Start run
         temp_db.start_run(
             run_id=run_id,
@@ -257,12 +261,12 @@ class TestRunManagement:
             profile=sample_profile,
             backend="gguf",
         )
-        
+
         # Check it's running
         run = temp_db.get_run(run_id)
         assert run is not None
         assert run["status"] == "running"
-        
+
         # Finish run
         temp_db.finish_run(
             run_id=run_id,
@@ -271,7 +275,7 @@ class TestRunManagement:
             best_recipe=sample_recipe,
             status="completed",
         )
-        
+
         # Check it's completed
         run = temp_db.get_run(run_id)
         assert run["status"] == "completed"
@@ -287,9 +291,9 @@ class TestRunManagement:
             profile=sample_profile,
             backend="gguf",
         )
-        
+
         incomplete = temp_db.get_incomplete_runs()
-        
+
         assert len(incomplete) == 1
         assert incomplete[0]["run_id"] == "incomplete-run"
 
@@ -306,15 +310,19 @@ class TestStatistics:
                 model_id="TinyLlama/TinyLlama-1.1B",
                 hardware_name="Test",
                 recipe=sample_recipe,
-                result=sample_result if i < 3 else ExperimentResult(
-                    actual_tps=0, actual_vram_usage=0, accuracy_score=0,
+                result=sample_result
+                if i < 3
+                else ExperimentResult(
+                    actual_tps=0,
+                    actual_vram_usage=0,
+                    accuracy_score=0,
                     was_successful=False,
                 ),
                 backend="gguf",
             )
-        
+
         stats = temp_db.get_statistics()
-        
+
         assert stats["total_experiments"] == 5
         assert stats["successful_experiments"] == 3
         assert stats["success_rate"] == 0.6
@@ -337,9 +345,9 @@ class TestExperimentRecord:
             created_at=datetime(2026, 1, 14, 12, 0, 0),
             iteration=0,
         )
-        
+
         d = record.to_dict()
-        
+
         assert d["id"] == 1
         assert d["run_id"] == "test-run"
         assert d["recipe"]["bits"] == 4
@@ -352,24 +360,27 @@ class TestFormatHistory:
     def test_format_empty_history(self, temp_db: HistoryDB):
         """Should handle no history gracefully."""
         # Use the temp_db's path
-        from sintra.persistence import _global_db, get_history_db
-        
         # Set up global DB to use temp
         import sintra.persistence as persistence_module
+        from sintra.persistence import _global_db, get_history_db
+
         persistence_module._global_db = temp_db
-        
+
         result = format_history_from_db("nonexistent/model", "Test")
-        
+
         assert "No previous experiments" in result
-        
+
         # Reset
         persistence_module._global_db = None
 
-    def test_format_with_history(self, temp_db: HistoryDB, sample_recipe, sample_result):
+    def test_format_with_history(
+        self, temp_db: HistoryDB, sample_recipe, sample_result
+    ):
         """Should format history entries."""
         import sintra.persistence as persistence_module
+
         persistence_module._global_db = temp_db
-        
+
         temp_db.save_experiment(
             run_id="run-1",
             model_id="TinyLlama/TinyLlama-1.1B",
@@ -378,11 +389,11 @@ class TestFormatHistory:
             result=sample_result,
             backend="gguf",
         )
-        
+
         result = format_history_from_db("TinyLlama/TinyLlama-1.1B", "Test")
-        
+
         assert "bits=4" in result
         assert "TPS=25.5" in result
         assert "✓" in result  # Successful
-        
+
         persistence_module._global_db = None

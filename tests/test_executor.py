@@ -60,7 +60,7 @@ class TestMockExecutor:
         recipe_8bit = ModelRecipe(bits=8, pruning_ratio=0.0)
 
         result_4bit = executor.run_benchmark(recipe_4bit, profile)
-        
+
         executor = MockExecutor(seed=42)  # Reset seed for fair comparison
         result_8bit = executor.run_benchmark(recipe_8bit, profile)
 
@@ -73,7 +73,7 @@ class TestMockExecutor:
         recipe_pruned = ModelRecipe(bits=8, pruning_ratio=0.5)
 
         result_no_prune = executor.run_benchmark(recipe_no_prune, profile)
-        
+
         executor = MockExecutor(seed=42)  # Reset seed
         result_pruned = executor.run_benchmark(recipe_pruned, profile)
 

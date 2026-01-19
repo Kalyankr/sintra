@@ -54,7 +54,7 @@ def architect_node(state: SintraState) -> StateUpdate:
     brain = get_architect_llm(state["llm_config"])
     profile = state["profile"]
     history_summary = format_history_for_llm(state["history"])
-    
+
     # Get historical context from database (across all runs)
     db_history = format_history_from_db(
         state["target_model_id"],
@@ -437,26 +437,25 @@ def critic_router(state: SintraState) -> str:
 # LLM-Based Routing (Alternative to rule-based critic_router)
 # ============================================================================
 
-from pydantic import BaseModel, Field
 from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class RoutingDecision(BaseModel):
     """LLM's decision about whether to continue or stop optimization."""
-    
+
     decision: Literal["continue", "stop"] = Field(
         description="Whether to continue optimization or stop"
     )
     confidence: float = Field(
-        ge=0.0, le=1.0,
-        description="Confidence in this decision (0-1)"
+        ge=0.0, le=1.0, description="Confidence in this decision (0-1)"
     )
     reasoning: str = Field(
         description="Brief explanation of why this decision was made"
     )
     suggestion: str = Field(
-        default="",
-        description="Optional suggestion for the architect if continuing"
+        default="", description="Optional suggestion for the architect if continuing"
     )
 
 
@@ -505,18 +504,18 @@ Respond with JSON:
 def critic_router_llm(state: SintraState) -> str:
     """
     LLM-based routing decision for more nuanced optimization control.
-    
+
     Uses an LLM to decide whether to continue optimization or stop,
     allowing for more sophisticated reasoning about trade-offs.
-    
+
     Falls back to rule-based routing if LLM fails.
     """
     from sintra.agents.factory import get_critic_llm
-    
+
     # Quick exits that don't need LLM
     if state.get("use_debug") or state.get("is_converged"):
         return "reporter"
-    
+
     if state.get("iteration", 0) >= MAX_ITERATIONS:
         log_transition(
             "Critic",
@@ -524,16 +523,16 @@ def critic_router_llm(state: SintraState) -> str:
             "status.warn",
         )
         return "reporter"
-    
+
     if not state["history"]:
         return "architect"
-    
+
     # Prepare context for LLM
     last_experiment = state["history"][-1]
     metrics = last_experiment["metrics"]
     recipe = last_experiment["recipe"]
     profile = state["profile"]
-    
+
     # Format history summary
     history_lines = []
     for i, entry in enumerate(state["history"][-5:], 1):  # Last 5 attempts
@@ -544,7 +543,7 @@ def critic_router_llm(state: SintraState) -> str:
             f"  {i}. [{status}] {r.bits}-bit, {r.pruning_ratio:.0%} prune → "
             f"TPS={m.actual_tps:.1f}, Acc={m.accuracy_score:.2f}"
         )
-    
+
     prompt = CRITIC_ROUTER_PROMPT.format(
         target_tps=profile.targets.min_tokens_per_second,
         target_accuracy=profile.targets.min_accuracy_score,
@@ -558,20 +557,26 @@ def critic_router_llm(state: SintraState) -> str:
         actual_accuracy=metrics.accuracy_score,
         actual_vram=metrics.actual_vram_usage,
         status="SUCCESS" if metrics.was_successful else f"FAILED: {metrics.error_log}",
-        history_summary="\n".join(history_lines) if history_lines else "No previous attempts",
+        history_summary="\n".join(history_lines)
+        if history_lines
+        else "No previous attempts",
     )
-    
+
     try:
-        log_transition("Critic", "[LLM] Evaluating optimization progress...", "critic.node")
-        
+        log_transition(
+            "Critic", "[LLM] Evaluating optimization progress...", "critic.node"
+        )
+
         llm = get_critic_llm(state["llm_config"])
         structured_llm = llm.with_structured_output(RoutingDecision)
-        
-        decision = structured_llm.invoke([
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": "Should we continue optimization or stop?"},
-        ])
-        
+
+        decision = structured_llm.invoke(
+            [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Should we continue optimization or stop?"},
+            ]
+        )
+
         if decision.decision == "stop":
             log_transition(
                 "Critic",
@@ -586,9 +591,11 @@ def critic_router_llm(state: SintraState) -> str:
                 "critic.node",
             )
             if decision.suggestion:
-                log_transition("Critic", f"[LLM] Suggestion: {decision.suggestion}", "critic.node")
+                log_transition(
+                    "Critic", f"[LLM] Suggestion: {decision.suggestion}", "critic.node"
+                )
             return "architect"
-            
+
     except Exception as e:
         log_transition(
             "Critic",

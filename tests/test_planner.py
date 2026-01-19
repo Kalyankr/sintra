@@ -82,7 +82,7 @@ def high_speed_state():
 
 class TestOptimizationStep:
     """Tests for OptimizationStep model."""
-    
+
     def test_create_step(self):
         """Test creating an optimization step."""
         step = OptimizationStep(
@@ -97,7 +97,7 @@ class TestOptimizationStep:
         assert step.strategy == "explore"
         assert step.target_bits == 4
         assert step.target_pruning == 0.1
-    
+
     def test_step_optional_fields(self):
         """Test step with optional fields."""
         step = OptimizationStep(
@@ -112,7 +112,7 @@ class TestOptimizationStep:
 
 class TestOptimizationPlan:
     """Tests for OptimizationPlan model."""
-    
+
     def test_create_plan(self):
         """Test creating an optimization plan."""
         plan = OptimizationPlan(
@@ -135,7 +135,7 @@ class TestOptimizationPlan:
         assert plan.overall_strategy == "balanced"
         assert len(plan.steps) == 1
         assert plan.confidence == 0.8
-    
+
     def test_plan_defaults(self):
         """Test plan default values."""
         plan = OptimizationPlan(
@@ -151,37 +151,37 @@ class TestOptimizationPlan:
 
 class TestEstimateModelSize:
     """Tests for model size estimation."""
-    
+
     def test_70b_model(self):
         """Test detecting 70B models."""
         assert _estimate_model_size("meta-llama/Llama-2-70b-chat") == "70B"
         assert _estimate_model_size("Qwen-72B-Chat") == "70B"
-    
+
     def test_13b_model(self):
         """Test detecting 13B models."""
         assert _estimate_model_size("meta-llama/Llama-2-13b-hf") == "13B"
         assert _estimate_model_size("vicuna-14b") == "13B"
-    
+
     def test_7b_model(self):
         """Test detecting 7B models."""
         assert _estimate_model_size("meta-llama/Llama-2-7b-hf") == "7B"
         assert _estimate_model_size("mistral-8b-instruct") == "7B"
-    
+
     def test_3b_model(self):
         """Test detecting 3B models."""
         assert _estimate_model_size("phi-3b") == "3B"
-    
+
     def test_1b_model(self):
         """Test detecting 1B models."""
         assert _estimate_model_size("TinyLlama-1.1b") == "1B"
         assert _estimate_model_size("pythia-1.3b") == "1B"
-    
+
     def test_small_model_keywords(self):
         """Test detecting small models by keyword."""
         assert _estimate_model_size("llama-tiny") == "1B"
         assert _estimate_model_size("gpt2-small") == "1B"
         assert _estimate_model_size("mini-model") == "1B"
-    
+
     def test_unknown_model(self):
         """Test unknown model size."""
         assert _estimate_model_size("custom-model") == "Unknown"
@@ -189,26 +189,26 @@ class TestEstimateModelSize:
 
 class TestRuleBasedPlan:
     """Tests for rule-based planning."""
-    
+
     def test_constrained_hardware_aggressive(self, constrained_state):
         """Test that constrained hardware leads to aggressive strategy."""
         plan = _create_rule_based_plan(constrained_state, "", "7B")
-        
+
         assert plan.overall_strategy == "aggressive"
         assert len(plan.steps) >= 2
         assert plan.steps[0].target_bits == 4  # Start aggressive
-    
+
     def test_high_speed_target_aggressive(self, high_speed_state):
         """Test that high TPS target leads to aggressive strategy."""
         plan = _create_rule_based_plan(high_speed_state, "", "7B")
-        
+
         assert plan.overall_strategy == "aggressive"
         assert plan.steps[0].target_bits <= 4  # Start with low bits
-    
+
     def test_balanced_strategy(self, mock_state):
         """Test balanced strategy for normal conditions."""
         plan = _create_rule_based_plan(mock_state, "", "7B")
-        
+
         assert plan.overall_strategy == "balanced"
         assert len(plan.steps) >= 3
         assert plan.steps[0].target_bits == 4  # Balanced start
@@ -216,11 +216,11 @@ class TestRuleBasedPlan:
 
 class TestDefaultPlan:
     """Tests for default plan creation."""
-    
+
     def test_debug_plan(self, mock_state):
         """Test creating a debug plan."""
         plan = _create_default_plan(mock_state)
-        
+
         assert plan.overall_strategy == "balanced"
         assert len(plan.steps) == 1
         assert plan.max_iterations == 1
@@ -229,7 +229,7 @@ class TestDefaultPlan:
 
 class TestGetPlanGuidance:
     """Tests for getting plan guidance."""
-    
+
     def test_get_first_step(self):
         """Test getting the first step."""
         plan = OptimizationPlan(
@@ -253,12 +253,12 @@ class TestGetPlanGuidance:
                 ),
             ],
         )
-        
+
         step = get_plan_guidance(plan, 1)
         assert step is not None
         assert step.step_number == 1
         assert step.target_bits == 4
-    
+
     def test_get_second_step(self):
         """Test getting the second step."""
         plan = OptimizationPlan(
@@ -280,11 +280,11 @@ class TestGetPlanGuidance:
                 ),
             ],
         )
-        
+
         step = get_plan_guidance(plan, 2)
         assert step is not None
         assert step.step_number == 2
-    
+
     def test_beyond_plan_length(self):
         """Test getting step beyond plan length."""
         plan = OptimizationPlan(
@@ -300,32 +300,32 @@ class TestGetPlanGuidance:
                 ),
             ],
         )
-        
+
         step = get_plan_guidance(plan, 5)
         assert step is None
 
 
 class TestPlannerNode:
     """Tests for the planner node function."""
-    
+
     def test_debug_mode_skips_llm(self, mock_state):
         """Test that debug mode uses default plan."""
         mock_state["use_debug"] = True
-        
+
         result = planner_node(mock_state)
-        
+
         assert "optimization_plan" in result
         plan = result["optimization_plan"]
         assert plan.max_iterations == 1
         assert "Debug" in plan.steps[0].description
-    
+
     def test_planner_creates_plan(self, mock_state):
         """Test that planner creates a valid plan."""
         # Use debug mode to avoid LLM call
         mock_state["use_debug"] = True
-        
+
         result = planner_node(mock_state)
-        
+
         assert "optimization_plan" in result
         plan = result["optimization_plan"]
         assert isinstance(plan, OptimizationPlan)
