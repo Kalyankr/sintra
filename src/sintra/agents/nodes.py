@@ -1,6 +1,8 @@
 """Agent workflow nodes for the Sintra optimization loop."""
 
 import json
+import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,6 +14,8 @@ from sintra.ui.console import log_transition
 
 from .state import SintraState
 from .utils import format_history_for_llm, get_untried_variations, is_duplicate_recipe
+
+logger = logging.getLogger(__name__)
 
 # Configuration constants
 MAX_ITERATIONS = 10
@@ -607,6 +611,7 @@ def critic_router_llm(state: SintraState) -> str:
 def reporter_node(state: SintraState) -> dict:
     """
     The Archivist: Saves the winning recipe to a JSON file using Pydantic v2 standards.
+    Also displays baseline accuracy comparison if available.
     """
     log_transition("Reporter", "Archiving the final 'Golden Recipe'...", "hw.profile")
 
@@ -616,23 +621,59 @@ def reporter_node(state: SintraState) -> dict:
 
     last_entry = state["history"][-1]
 
+    # Get recipe and metrics
+    recipe_data = (
+        last_entry["recipe"].model_dump()
+        if hasattr(last_entry["recipe"], "model_dump")
+        else last_entry["recipe"]
+    )
+    metrics_data = (
+        last_entry["metrics"].model_dump()
+        if hasattr(last_entry["metrics"], "model_dump")
+        else last_entry["metrics"]
+    )
+
     output = {
         "hardware_profile": state["profile"].name,
-        "recipe": last_entry["recipe"].model_dump()
-        if hasattr(last_entry["recipe"], "model_dump")
-        else last_entry["recipe"],
-        "performance": last_entry["metrics"].model_dump()
-        if hasattr(last_entry["metrics"], "model_dump")
-        else last_entry["metrics"],
+        "recipe": recipe_data,
+        "performance": metrics_data,
     }
 
+    # Display baseline accuracy comparison if available
+    from sintra.ui.console import console
+
+    if metrics_data.get("accuracy_retention") is not None:
+        retention = metrics_data["accuracy_retention"] * 100
+        accuracy_loss = metrics_data.get("accuracy_loss", 0) * 100
+
+        console.print("\n[bold cyan]📊 Baseline Accuracy Comparison[/bold cyan]")
+        console.print(f"  Optimized Accuracy: {metrics_data['accuracy_score']:.2%}")
+        console.print(f"  Accuracy Retention: [green]{retention:.1f}%[/green]")
+        if accuracy_loss > 0:
+            console.print(f"  Accuracy Loss:      [yellow]{accuracy_loss:.1f}%[/yellow]")
+        console.print()
+
+        output["baseline_comparison"] = {
+            "retention_rate": metrics_data["accuracy_retention"],
+            "accuracy_loss": metrics_data.get("accuracy_loss", 0),
+        }
+
     try:
-        DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        with open(DEFAULT_OUTPUT_FILE, "w") as f:
+        output_dir = Path(os.environ.get("SINTRA_OUTPUT_DIR", "outputs"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / "optimized_recipe.json"
+
+        with open(output_file, "w") as f:
             json.dump(output, f, indent=4)
         log_transition(
-            "Reporter", f"Recipe saved to {DEFAULT_OUTPUT_FILE}", "status.success"
+            "Reporter", f"Recipe saved to {output_file}", "status.success"
         )
+
+        # Handle Ollama export if requested
+        ollama_model_name = os.environ.get("SINTRA_EXPORT_OLLAMA")
+        if ollama_model_name:
+            _export_to_ollama(output_dir, ollama_model_name)
+
     except OSError as e:
         log_transition(
             "Reporter",
@@ -640,8 +681,73 @@ def reporter_node(state: SintraState) -> dict:
             "status.warn",
         )
         # Fallback: print to console
-        from sintra.ui.console import console
-
         console.print_json(data=output)
 
     return state
+
+
+def _export_to_ollama(output_dir: Path, model_name: str) -> None:
+    """Export the optimized model to Ollama.
+
+    Args:
+        output_dir: Directory containing the optimized GGUF model
+        model_name: Name for the Ollama model
+    """
+    from sintra.ui.console import console
+
+    try:
+        from sintra.compression.ollama_exporter import (
+            OllamaExportError,
+            OllamaExporter,
+        )
+
+        # Find the GGUF model in output or cache directory
+        gguf_files = list(output_dir.glob("*.gguf"))
+
+        # Also check the cache directory
+        cache_dir = Path.home() / ".cache" / "sintra" / "quantized"
+        if cache_dir.exists():
+            gguf_files.extend(cache_dir.glob("*.gguf"))
+
+        if not gguf_files:
+            log_transition(
+                "Reporter",
+                "No GGUF model found for Ollama export",
+                "status.warn",
+            )
+            return
+
+        # Use the most recently modified GGUF file
+        gguf_path = max(gguf_files, key=lambda p: p.stat().st_mtime)
+
+        console.print(f"\n[bold cyan]🦙 Exporting to Ollama...[/bold cyan]")
+        console.print(f"  Model: {gguf_path.name}")
+        console.print(f"  Name:  {model_name}")
+
+        exporter = OllamaExporter()
+        system_prompt = os.environ.get("SINTRA_OLLAMA_SYSTEM_PROMPT")
+
+        result = exporter.export(
+            gguf_path,
+            model_name,
+            system_prompt=system_prompt,
+            force=True,
+        )
+
+        if result.success:
+            console.print(f"\n[green]✓ {result.message}[/green]")
+            console.print(f"  Run: [cyan]ollama run {model_name}[/cyan]")
+        else:
+            console.print(f"\n[red]✗ Ollama export failed: {result.message}[/red]")
+
+    except ImportError:
+        log_transition(
+            "Reporter",
+            "Ollama exporter not available",
+            "status.warn",
+        )
+    except OllamaExportError as e:
+        console.print(f"\n[red]✗ Ollama export error: {e}[/red]")
+    except Exception as e:
+        logger.warning(f"Ollama export failed: {e}")
+        console.print(f"\n[yellow]Warning: Ollama export failed: {e}[/yellow]")

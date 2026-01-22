@@ -60,6 +60,15 @@ try:
 except ImportError:
     pass
 
+# Ollama exporter (always available)
+from .ollama_exporter import (
+    OllamaExporter,
+    OllamaExportError,
+    OllamaExportResult,
+    export_to_ollama,
+    is_ollama_available,
+)
+
 __all__ = [
     # Downloader
     "ModelDownloader",
@@ -78,5 +87,14 @@ __all__ = [
     "apply_compression",
     # Evaluator
     "AccuracyEvaluator",
+    "AccuracyComparison",
     "evaluate_perplexity",
+    "compare_accuracy",
+    "evaluate_with_baseline",
+    # Ollama Exporter
+    "OllamaExporter",
+    "OllamaExportError",
+    "OllamaExportResult",
+    "export_to_ollama",
+    "is_ollama_available",
 ]

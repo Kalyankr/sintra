@@ -188,6 +188,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run a single-loop test without calling the LLM API",
     )
+    group_debug.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase output verbosity (-v for info, -vv for debug)",
+    )
+
+    # Export Options
+    group_export = parser.add_argument_group("Export Options")
+    group_export.add_argument(
+        "--export-ollama",
+        type=str,
+        metavar="MODEL_NAME",
+        default=None,
+        help="Export optimized model to Ollama with given name (e.g., --export-ollama my-model:q4)",
+    )
+    group_export.add_argument(
+        "--ollama-system-prompt",
+        type=str,
+        default=None,
+        help="System prompt for exported Ollama model",
+    )
 
     args = parser.parse_args()
 

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sys
 import uuid
@@ -110,9 +111,42 @@ def build_sintra_workflow(
     return workflow.compile()
 
 
+def _setup_logging(verbosity: int) -> None:
+    """Configure logging based on verbosity level.
+
+    Args:
+        verbosity: 0=warning, 1=info, 2+=debug
+    """
+    level = logging.WARNING
+    if verbosity == 1:
+        level = logging.INFO
+    elif verbosity >= 2:
+        level = logging.DEBUG
+
+    # Configure root logger
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    # Set specific loggers
+    loggers = [
+        "sintra",
+        "sintra.compression",
+        "sintra.agents",
+        "sintra.benchmarks",
+    ]
+    for logger_name in loggers:
+        logging.getLogger(logger_name).setLevel(level)
+
+
 def main():
     # Get CLI arguments
     args = parse_args()
+
+    # Setup logging based on verbosity
+    _setup_logging(getattr(args, "verbose", 0))
 
     # Setup UI
     console.rule("[arch.node] SINTRA: Edge AI Distiller")
@@ -123,7 +157,8 @@ def main():
         return
 
     # Setup progress reporter
-    set_global_reporter(ConsoleProgressReporter(show_details=args.debug))
+    show_details = args.debug or getattr(args, "verbose", 0) >= 1
+    set_global_reporter(ConsoleProgressReporter(show_details=show_details))
 
     # Setup output directory first (needed for saving detected profile)
     output_dir = Path(args.output_dir) if args.output_dir else Path("./outputs")
@@ -164,12 +199,23 @@ def main():
     os.environ["SINTRA_BACKEND"] = args.backend
     os.environ["SINTRA_USE_BASELINE"] = "true" if args.baseline else "false"
     os.environ["SINTRA_SKIP_ACCURACY"] = "true" if args.skip_accuracy else "false"
+
+    # Set up Ollama export if requested
+    if getattr(args, "export_ollama", None):
+        os.environ["SINTRA_EXPORT_OLLAMA"] = args.export_ollama
+        if getattr(args, "ollama_system_prompt", None):
+            os.environ["SINTRA_OLLAMA_SYSTEM_PROMPT"] = args.ollama_system_prompt
+        log_transition(
+            "System",
+            f"Will export to Ollama as '{args.export_ollama}' on completion",
+            "hw.profile",
+        )
     if args.hf_token:
         os.environ["HF_TOKEN"] = args.hf_token
 
-    # Check backend dependencies
-    if args.backend == "gguf" and not args.mock and not args.debug:
-        _check_gguf_dependencies()
+    # Check backend dependencies (skip for mock and debug modes)
+    if not args.mock and not args.debug:
+        _check_backend_dependencies(args.backend)
 
     backend_names = {
         "gguf": "GGUF/llama.cpp",
@@ -535,12 +581,17 @@ def _check_gguf_dependencies():
     available, message = check_llama_cpp_available()
 
     if not available:
-        console.print(f"[bold red]⚠️  GGUF Backend: {message}[/bold red]")
+        console.print("\n[bold red]⚠️  GGUF Backend Not Available[/bold red]\n")
+        console.print(f"[red]Issue:[/red] {message}\n")
         console.print(LLAMA_CPP_INSTALL_INSTRUCTIONS)
-        console.print("[yellow]Options:[/yellow]")
-        console.print("  1. Install llama.cpp (see instructions above)")
-        console.print("  2. Use --backend bnb (requires NVIDIA GPU)")
-        console.print("  3. Use --mock for testing without real compression")
+        console.print("\n[bold yellow]Alternative Options:[/bold yellow]")
+        console.print("  [cyan]1.[/cyan] Install llama.cpp (see instructions above)")
+        console.print("  [cyan]2.[/cyan] Use BitsAndBytes backend (requires NVIDIA GPU):")
+        console.print("     [dim]sintra --backend bnb --model-id <model>[/dim]")
+        console.print("  [cyan]3.[/cyan] Use ONNX backend (cross-platform):")
+        console.print("     [dim]sintra --backend onnx --model-id <model>[/dim]")
+        console.print("  [cyan]4.[/cyan] Use mock mode for testing:")
+        console.print("     [dim]sintra --mock[/dim]")
         console.print()
 
         # Ask user if they want to continue
@@ -550,6 +601,78 @@ def _check_gguf_dependencies():
                 sys.exit(1)
         except (EOFError, KeyboardInterrupt):
             sys.exit(1)
+
+
+def _check_backend_dependencies(backend: str) -> None:
+    """Check if required dependencies are available for the selected backend.
+
+    Args:
+        backend: Backend name ('gguf', 'bnb', 'onnx')
+
+    Raises:
+        SystemExit: If required dependencies are missing and user declines to continue
+    """
+    if backend == "gguf":
+        _check_gguf_dependencies()
+    elif backend == "bnb":
+        _check_bnb_dependencies()
+    elif backend == "onnx":
+        _check_onnx_dependencies()
+
+
+def _check_bnb_dependencies():
+    """Check if BitsAndBytes is available."""
+    try:
+        import bitsandbytes  # noqa: F401
+        import accelerate  # noqa: F401
+        import torch
+
+        if not torch.cuda.is_available():
+            console.print("\n[bold yellow]⚠️  BitsAndBytes Warning[/bold yellow]\n")
+            console.print("[yellow]CUDA is not available. BitsAndBytes requires an NVIDIA GPU.[/yellow]")
+            console.print("\n[bold]Options:[/bold]")
+            console.print("  [cyan]1.[/cyan] Use GGUF backend instead (CPU/Metal):")
+            console.print("     [dim]sintra --backend gguf --model-id <model>[/dim]")
+            console.print("  [cyan]2.[/cyan] Use ONNX backend:")
+            console.print("     [dim]sintra --backend onnx --model-id <model>[/dim]")
+            console.print()
+
+            try:
+                response = input("Continue anyway? [y/N]: ").strip().lower()
+                if response != "y":
+                    sys.exit(1)
+            except (EOFError, KeyboardInterrupt):
+                sys.exit(1)
+
+    except ImportError:
+        console.print("\n[bold red]⚠️  BitsAndBytes Not Installed[/bold red]\n")
+        console.print("[red]The BitsAndBytes backend requires additional packages.[/red]")
+        console.print("\n[bold]Install with:[/bold]")
+        console.print("  [cyan]pip install sintra[bnb][/cyan]")
+        console.print("  [dim]or: pip install bitsandbytes accelerate[/dim]")
+        console.print("\n[bold]Alternative backends:[/bold]")
+        console.print("  [cyan]--backend gguf[/cyan]  CPU/Metal via llama.cpp")
+        console.print("  [cyan]--backend onnx[/cyan]  Cross-platform via ONNX Runtime")
+        console.print()
+        sys.exit(1)
+
+
+def _check_onnx_dependencies():
+    """Check if ONNX/Optimum is available."""
+    try:
+        import onnx  # noqa: F401
+        import optimum  # noqa: F401
+    except ImportError:
+        console.print("\n[bold red]⚠️  ONNX Backend Not Installed[/bold red]\n")
+        console.print("[red]The ONNX backend requires additional packages.[/red]")
+        console.print("\n[bold]Install with:[/bold]")
+        console.print("  [cyan]pip install sintra[onnx][/cyan]")
+        console.print("  [dim]or: pip install optimum[onnxruntime] onnx[/dim]")
+        console.print("\n[bold]Alternative backends:[/bold]")
+        console.print("  [cyan]--backend gguf[/cyan]  CPU/Metal via llama.cpp (default)")
+        console.print("  [cyan]--backend bnb[/cyan]   GPU-accelerated via BitsAndBytes")
+        console.print()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
