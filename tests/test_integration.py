@@ -460,3 +460,207 @@ class TestGGUFIntegration:
         # This would require a real model to be downloaded first
         quantizer = GGUFQuantizer(cache_dir=tmp_path)
         # quantizer.quantize(model_path, bits=4)
+
+
+# =============================================================================
+# End-to-End Pipeline Tests
+# =============================================================================
+
+
+@pytest.mark.integration
+class TestEndToEndPipeline:
+    """Full end-to-end tests of the Sintra optimization pipeline.
+
+    These tests verify the complete workflow from CLI to output.
+    """
+
+    def test_full_workflow_with_langgraph(self, test_state, temp_checkpoint_dir):
+        """Test complete LangGraph workflow execution."""
+        from sintra.main import build_sintra_workflow
+
+        # Build workflow without advanced agentic features for testing
+        app = build_sintra_workflow(
+            use_planner=False,
+            use_react=False,
+            use_reflection=False,
+            use_llm_routing=False,
+        )
+
+        # Run the workflow
+        final_state = None
+        for state in app.stream(test_state, config={"recursion_limit": 10}):
+            final_state = state
+
+        # Verify workflow completed
+        assert final_state is not None
+
+        # The last node should have produced output
+        last_output = list(final_state.values())[-1]
+        assert last_output is not None
+
+    def test_workflow_with_planner(self, test_state, temp_checkpoint_dir):
+        """Test workflow with planner enabled (debug mode)."""
+        from sintra.main import build_sintra_workflow
+
+        # Enable planner but use debug mode
+        app = build_sintra_workflow(
+            use_planner=True,
+            use_react=False,
+            use_reflection=False,
+            use_llm_routing=False,
+        )
+
+        final_state = None
+        for state in app.stream(test_state, config={"recursion_limit": 10}):
+            final_state = state
+
+        assert final_state is not None
+
+    def test_baseline_comparison_workflow(self, test_state, temp_checkpoint_dir):
+        """Test that baseline comparison flag is respected in workflow."""
+        import os
+
+        # Set up environment for baseline comparison
+        os.environ["SINTRA_USE_BASELINE"] = "true"
+        os.environ["SINTRA_SKIP_ACCURACY"] = "false"
+        os.environ["SINTRA_MODEL_ID"] = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        from sintra.main import build_sintra_workflow
+
+        app = build_sintra_workflow(
+            use_planner=False,
+            use_react=False,
+            use_reflection=False,
+            use_llm_routing=False,
+        )
+
+        # Workflow should complete even with baseline flags set
+        final_state = None
+        for state in app.stream(test_state, config={"recursion_limit": 10}):
+            final_state = state
+
+        assert final_state is not None
+
+        # Clean up
+        os.environ.pop("SINTRA_USE_BASELINE", None)
+        os.environ.pop("SINTRA_SKIP_ACCURACY", None)
+
+    def test_reporter_saves_output(self, test_state, tmp_path, temp_checkpoint_dir):
+        """Test that reporter node saves JSON output correctly."""
+        import os
+
+        from sintra.agents.nodes import reporter_node
+
+        os.environ["SINTRA_OUTPUT_DIR"] = str(tmp_path)
+
+        # Create history with a successful entry
+        from sintra.profiles.models import ExperimentResult
+
+        test_state["history"] = [
+            {
+                "recipe": ModelRecipe(bits=4, pruning_ratio=0.1),
+                "metrics": ExperimentResult(
+                    actual_tps=30.0,
+                    actual_vram_usage=2.5,
+                    accuracy_score=0.85,
+                    was_successful=True,
+                    accuracy_retention=0.95,
+                    accuracy_loss=0.05,
+                ),
+            }
+        ]
+
+        # Run reporter
+        reporter_node(test_state)
+
+        # Check output file was created
+        output_file = tmp_path / "optimized_recipe.json"
+        assert output_file.exists()
+
+        # Verify contents
+        with open(output_file) as f:
+            output = json.load(f)
+
+        assert output["recipe"]["bits"] == 4
+        assert output["performance"]["accuracy_score"] == 0.85
+        assert "baseline_comparison" in output
+        assert output["baseline_comparison"]["retention_rate"] == 0.95
+
+    def test_ollama_export_integration(self, test_state, tmp_path):
+        """Test Ollama export environment variable is respected."""
+        import os
+
+        # This tests the environment variable setup, not actual Ollama export
+        os.environ["SINTRA_EXPORT_OLLAMA"] = "test-model:q4"
+        os.environ["SINTRA_OUTPUT_DIR"] = str(tmp_path)
+
+        # Create a mock GGUF file
+        mock_gguf = tmp_path / "test-model.gguf"
+        mock_gguf.write_text("mock gguf content")
+
+        from sintra.profiles.models import ExperimentResult
+
+        test_state["history"] = [
+            {
+                "recipe": ModelRecipe(bits=4),
+                "metrics": ExperimentResult(
+                    actual_tps=25.0,
+                    actual_vram_usage=2.0,
+                    accuracy_score=0.8,
+                    was_successful=True,
+                ),
+            }
+        ]
+
+        # Reporter should attempt Ollama export (will fail gracefully since Ollama likely not running)
+        from sintra.agents.nodes import reporter_node
+
+        # Should not raise even if Ollama is not available
+        reporter_node(test_state)
+
+        # Clean up
+        os.environ.pop("SINTRA_EXPORT_OLLAMA", None)
+
+
+@pytest.mark.integration
+class TestVerboseLogging:
+    """Test verbose logging functionality."""
+
+    def test_verbose_flag_sets_logging_level(self):
+        """Test that -v flag configures logging correctly."""
+        import logging
+
+        from sintra.main import _setup_logging
+
+        # Test level 0 (default)
+        _setup_logging(0)
+        assert logging.getLogger("sintra").level == logging.WARNING
+
+        # Test level 1 (-v)
+        _setup_logging(1)
+        assert logging.getLogger("sintra").level == logging.INFO
+
+        # Test level 2 (-vv)
+        _setup_logging(2)
+        assert logging.getLogger("sintra").level == logging.DEBUG
+
+
+@pytest.mark.integration
+class TestBackendDependencyChecks:
+    """Test backend dependency checking."""
+
+    def test_gguf_check_returns_tuple(self):
+        """GGUF check should return (bool, str)."""
+        from sintra.compression.quantizer import check_llama_cpp_available
+
+        available, message = check_llama_cpp_available()
+        assert isinstance(available, bool)
+        assert isinstance(message, str)
+
+    def test_ollama_check_returns_tuple(self):
+        """Ollama check should return (bool, str)."""
+        from sintra.compression.ollama_exporter import is_ollama_available
+
+        available, message = is_ollama_available()
+        assert isinstance(available, bool)
+        assert isinstance(message, str)
