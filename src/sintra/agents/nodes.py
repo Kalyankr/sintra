@@ -57,7 +57,6 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     brain = get_architect_llm(state["llm_config"])
     profile = state["profile"]
-    history_summary = format_history_for_llm(state["history"])
 
     # Get historical context from database (across all runs)
     db_history = format_history_from_db(
@@ -68,16 +67,8 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     history = state.get("history", [])
 
-    # Create a string of previous attempts to prevent repeats
-    past_attempts = ""
-    for i, entry in enumerate(history):
-        recipe = entry.get("recipe")
-        metrics = entry.get("metrics")
-        past_attempts += (
-            f"- Attempt {i + 1}: bits={recipe.bits}, pruning={recipe.pruning_ratio:.2f}, "
-            f"layers_dropped={recipe.layers_to_drop} → TPS={metrics.actual_tps:.1f}, "
-            f"accuracy={metrics.accuracy_score:.2f}\n"
-        )
+    # Build past attempts summary (single pass \u2014 reused in both prompt and user message)
+    past_attempts = format_history_for_llm(history)
 
     # Get suggestions for untried combinations
     variations = get_untried_variations(history) if history else {}
@@ -202,7 +193,7 @@ def architect_node(state: SintraState) -> StateUpdate:
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": f"History:\n{history_summary}\nPropose next recipe.",
+                    "content": f"History:\n{past_attempts}\nPropose next recipe.",
                 },
             ]
         )
