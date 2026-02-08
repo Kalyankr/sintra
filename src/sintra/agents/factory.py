@@ -21,6 +21,9 @@ PROVIDER_API_KEYS = {
     LLMProvider.GOOGLE: "GOOGLE_API_KEY",
 }
 
+# Cache for LLM instances — avoids re-creating expensive clients per call
+_llm_cache: dict[tuple[str, str, float], BaseChatModel] = {}
+
 
 class MissingAPIKeyError(Exception):
     """Raised when a required API key is not set."""
@@ -30,6 +33,9 @@ class MissingAPIKeyError(Exception):
 
 def _get_base_llm(config: LLMConfig) -> BaseChatModel:
     """Returns a base LLM instance without structured output binding.
+
+    Caches instances by (provider, model_name, temperature) to avoid
+    re-creating expensive API clients on every node invocation.
 
     Args:
         config: LLM configuration with provider, model name, and temperature.
@@ -41,6 +47,10 @@ def _get_base_llm(config: LLMConfig) -> BaseChatModel:
         MissingAPIKeyError: If the required API key is not set.
         ValueError: If the provider is not supported.
     """
+    cache_key = (config.provider.value, config.model_name, config.temperature)
+    if cache_key in _llm_cache:
+        return _llm_cache[cache_key]
+
     # Check for required API key (Ollama doesn't need one)
     if config.provider in PROVIDER_API_KEYS:
         env_var = PROVIDER_API_KEYS[config.provider]
@@ -51,22 +61,22 @@ def _get_base_llm(config: LLMConfig) -> BaseChatModel:
             )
 
     if config.provider == LLMProvider.OPENAI:
-        return ChatOpenAI(model=config.model_name, temperature=config.temperature)
+        llm = ChatOpenAI(model=config.model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.ANTHROPIC:
-        return ChatAnthropic(model=config.model_name, temperature=config.temperature)
+        llm = ChatAnthropic(model=config.model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.GOOGLE:
         # Normalize model name - some LangChain versions require 'models/' prefix
         model_name = config.model_name
         if not model_name.startswith("models/"):
             model_name = f"models/{model_name}"
-        return ChatGoogleGenerativeAI(model=model_name, temperature=config.temperature)
+        llm = ChatGoogleGenerativeAI(model=model_name, temperature=config.temperature)
 
     elif config.provider == LLMProvider.OLLAMA:
         from langchain_ollama import ChatOllama
 
-        return ChatOllama(
+        llm = ChatOllama(
             model=config.model_name,
             temperature=config.temperature,
             num_ctx=4096,
@@ -75,6 +85,9 @@ def _get_base_llm(config: LLMConfig) -> BaseChatModel:
 
     else:
         raise ValueError(f"Provider {config.provider} not supported.")
+
+    _llm_cache[cache_key] = llm
+    return llm
 
 
 def get_architect_llm(config: LLMConfig) -> StructuredLLM:

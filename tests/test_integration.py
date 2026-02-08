@@ -236,7 +236,7 @@ class TestPersistenceIntegration:
         )
 
         assert best is not None
-        best_recipe, best_result = best
+        best_recipe, _best_result = best
         assert best_recipe.bits == 4  # Highest accuracy (0.9)
 
     def test_run_lifecycle(self, temp_db, test_profile):
@@ -458,7 +458,7 @@ class TestGGUFIntegration:
         from sintra.compression.quantizer import GGUFQuantizer
 
         # This would require a real model to be downloaded first
-        quantizer = GGUFQuantizer(cache_dir=tmp_path)
+        GGUFQuantizer(cache_dir=tmp_path)
         # quantizer.quantize(model_path, bits=4)
 
 

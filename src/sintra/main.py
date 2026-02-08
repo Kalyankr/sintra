@@ -11,8 +11,8 @@ from langgraph.graph import END, StateGraph
 # Load environment variables from .env file (if exists)
 load_dotenv()
 
-from sintra.agents.factory import MissingAPIKeyError
-from sintra.agents.nodes import (
+from sintra.agents.factory import MissingAPIKeyError  # noqa: E402
+from sintra.agents.nodes import (  # noqa: E402
     LLMConnectionError,
     architect_node,
     benchmarker_node,
@@ -21,26 +21,29 @@ from sintra.agents.nodes import (
     critic_router_llm,
     reporter_node,
 )
-from sintra.agents.planner import planner_node
-from sintra.agents.react_architect import react_architect_node
-from sintra.agents.reflector import reflector_node
-from sintra.agents.state import SintraState
-from sintra.checkpoint import (
+from sintra.agents.planner import planner_node  # noqa: E402
+from sintra.agents.react_architect import react_architect_node  # noqa: E402
+from sintra.agents.reflector import reflector_node  # noqa: E402
+from sintra.agents.state import SintraState  # noqa: E402
+from sintra.checkpoint import (  # noqa: E402
     find_latest_checkpoint,
     list_checkpoints,
     load_checkpoint,
     save_checkpoint,
 )
-from sintra.cli import parse_args
-from sintra.persistence import get_history_db
-from sintra.profiles.hardware import (
+from sintra.cli import parse_args  # noqa: E402
+from sintra.persistence import get_history_db  # noqa: E402
+from sintra.profiles.hardware import (  # noqa: E402
     auto_detect_hardware,
     print_hardware_info,
 )
-from sintra.profiles.models import LLMConfig, LLMProvider
-from sintra.profiles.parser import ProfileLoadError, load_hardware_profile
-from sintra.ui.console import console, log_transition
-from sintra.ui.progress import ConsoleProgressReporter, set_global_reporter
+from sintra.profiles.models import LLMConfig, LLMProvider  # noqa: E402
+from sintra.profiles.parser import ProfileLoadError, load_hardware_profile  # noqa: E402
+from sintra.ui.console import console, log_transition  # noqa: E402
+from sintra.ui.progress import (  # noqa: E402
+    ConsoleProgressReporter,
+    set_global_reporter,
+)
 
 
 def build_sintra_workflow(
@@ -586,7 +589,9 @@ def _check_gguf_dependencies():
         console.print(LLAMA_CPP_INSTALL_INSTRUCTIONS)
         console.print("\n[bold yellow]Alternative Options:[/bold yellow]")
         console.print("  [cyan]1.[/cyan] Install llama.cpp (see instructions above)")
-        console.print("  [cyan]2.[/cyan] Use BitsAndBytes backend (requires NVIDIA GPU):")
+        console.print(
+            "  [cyan]2.[/cyan] Use BitsAndBytes backend (requires NVIDIA GPU):"
+        )
         console.print("     [dim]sintra --backend bnb --model-id <model>[/dim]")
         console.print("  [cyan]3.[/cyan] Use ONNX backend (cross-platform):")
         console.print("     [dim]sintra --backend onnx --model-id <model>[/dim]")
@@ -623,13 +628,15 @@ def _check_backend_dependencies(backend: str) -> None:
 def _check_bnb_dependencies():
     """Check if BitsAndBytes is available."""
     try:
-        import bitsandbytes  # noqa: F401
         import accelerate  # noqa: F401
+        import bitsandbytes  # noqa: F401
         import torch
 
         if not torch.cuda.is_available():
             console.print("\n[bold yellow]⚠️  BitsAndBytes Warning[/bold yellow]\n")
-            console.print("[yellow]CUDA is not available. BitsAndBytes requires an NVIDIA GPU.[/yellow]")
+            console.print(
+                "[yellow]CUDA is not available. BitsAndBytes requires an NVIDIA GPU.[/yellow]"
+            )
             console.print("\n[bold]Options:[/bold]")
             console.print("  [cyan]1.[/cyan] Use GGUF backend instead (CPU/Metal):")
             console.print("     [dim]sintra --backend gguf --model-id <model>[/dim]")
@@ -646,7 +653,9 @@ def _check_bnb_dependencies():
 
     except ImportError:
         console.print("\n[bold red]⚠️  BitsAndBytes Not Installed[/bold red]\n")
-        console.print("[red]The BitsAndBytes backend requires additional packages.[/red]")
+        console.print(
+            "[red]The BitsAndBytes backend requires additional packages.[/red]"
+        )
         console.print("\n[bold]Install with:[/bold]")
         console.print("  [cyan]pip install sintra[bnb][/cyan]")
         console.print("  [dim]or: pip install bitsandbytes accelerate[/dim]")
@@ -669,7 +678,9 @@ def _check_onnx_dependencies():
         console.print("  [cyan]pip install sintra[onnx][/cyan]")
         console.print("  [dim]or: pip install optimum[onnxruntime] onnx[/dim]")
         console.print("\n[bold]Alternative backends:[/bold]")
-        console.print("  [cyan]--backend gguf[/cyan]  CPU/Metal via llama.cpp (default)")
+        console.print(
+            "  [cyan]--backend gguf[/cyan]  CPU/Metal via llama.cpp (default)"
+        )
         console.print("  [cyan]--backend bnb[/cyan]   GPU-accelerated via BitsAndBytes")
         console.print()
         sys.exit(1)

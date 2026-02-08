@@ -22,9 +22,11 @@ class TestCliArgs:
         """Should require profile when --no-auto-detect is used."""
         from sintra.cli import parse_args
 
-        with patch.object(sys, "argv", ["sintra", "--no-auto-detect"]):
-            with pytest.raises(SystemExit):
-                parse_args()
+        with (
+            patch.object(sys, "argv", ["sintra", "--no-auto-detect"]),
+            pytest.raises(SystemExit),
+        ):
+            parse_args()
 
     def test_profile_optional_with_auto_detect(self):
         """Should not require profile when auto-detect is enabled (default)."""

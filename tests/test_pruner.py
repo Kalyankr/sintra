@@ -230,7 +230,7 @@ class TestStructuredPruner:
         model_dir.mkdir()
 
         pruner = StructuredPruner(cache_dir=tmp_path)
-        with pytest.raises(PruningError, match="must be less than 1.0"):
+        with pytest.raises(PruningError, match=r"must be less than 1\.0"):
             pruner.prune(model_dir, 1.0)
 
     def test_prune_invalid_path(self, tmp_path: Path) -> None:
@@ -373,11 +373,11 @@ class TestIntegration:
         self, mock_model_dir: Path, tmp_path: Path
     ) -> None:
         """Test that LayerDropper creates sensible output names."""
-        dropper = LayerDropper(cache_dir=tmp_path)
+        LayerDropper(cache_dir=tmp_path)
 
         # Would fail at weight processing, but we can test the name generation
         expected_name = f"{mock_model_dir.name}-dropped2"
-        expected_path = tmp_path / "pruned" / expected_name
+        tmp_path / "pruned" / expected_name
 
         # The dropper validates config first, which this mock model has
         # It will fail later trying to process weights, which is fine for this test
@@ -387,7 +387,7 @@ class TestIntegration:
         model_dir = tmp_path / "test-model"
         model_dir.mkdir()
 
-        pruner = StructuredPruner(cache_dir=tmp_path)
+        StructuredPruner(cache_dir=tmp_path)
 
         # Test name generation (ratio 20% -> "20pct")
         # The actual pruning would fail without weights, but we can verify the naming logic

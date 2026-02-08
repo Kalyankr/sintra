@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,16 @@ LLAMA_CPP_INSTALL_INSTRUCTIONS = """
 """
 
 
-def _get_convert_script_paths() -> list[Path]:
+@lru_cache(maxsize=1)
+def _get_convert_script_paths() -> tuple[Path, ...]:
     """Get all possible paths where convert_hf_to_gguf.py might be installed.
 
     Searches:
     - Standard llama.cpp clone locations
     - Python site-packages (from llama-cpp-python pip package)
     - Current virtualenv
+
+    Returns a tuple (hashable) so this function can be cached.
     """
 
     paths = [
@@ -91,11 +95,14 @@ def _get_convert_script_paths() -> list[Path]:
         env_script = Path(llama_cpp_path) / "convert_hf_to_gguf.py"
         paths.insert(0, env_script)
 
-    return paths
+    return tuple(paths)
 
 
+@lru_cache(maxsize=1)
 def check_llama_cpp_available() -> tuple[bool, str]:
     """Check if llama.cpp is properly installed.
+
+    Result is cached since tool availability doesn't change during process lifetime.
 
     Returns:
         Tuple of (is_available, message)
@@ -291,10 +298,10 @@ class GGUFQuantizer:
             logger.info(f"Converted to {output_file}")
             return output_file
 
-        except subprocess.TimeoutExpired:
-            raise QuantizationError("GGUF conversion timed out (10 min limit)")
-        except FileNotFoundError:
-            raise QuantizationError("python3 not found")
+        except subprocess.TimeoutExpired as e:
+            raise QuantizationError("GGUF conversion timed out (10 min limit)") from e
+        except FileNotFoundError as e:
+            raise QuantizationError("python3 not found") from e
 
     def quantize(
         self,
@@ -389,8 +396,8 @@ class GGUFQuantizer:
             logger.info(f"Quantized to {output_file}")
             return output_file
 
-        except subprocess.TimeoutExpired:
-            raise QuantizationError("Quantization timed out (30 min limit)")
+        except subprocess.TimeoutExpired as e:
+            raise QuantizationError("Quantization timed out (30 min limit)") from e
 
     def get_cached_quantizations(self, model_name: str) -> list[Path]:
         """List cached quantizations for a model."""

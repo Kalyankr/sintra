@@ -192,7 +192,7 @@ def load_checkpoint(run_id: str) -> dict[str, Any] | None:
     return data
 
 
-def find_latest_checkpoint(model_id: str = None) -> dict[str, Any] | None:
+def find_latest_checkpoint(model_id: str | None = None) -> dict[str, Any] | None:
     """Find the most recent checkpoint, optionally filtering by model.
 
     Args:
@@ -320,8 +320,7 @@ def cleanup_old_checkpoints(max_age_days: int = 7, max_count: int = 50) -> int:
         except ValueError:
             pass
 
-        if should_delete:
-            if delete_checkpoint(cp["run_id"]):
-                deleted += 1
+        if should_delete and delete_checkpoint(cp["run_id"]):
+            deleted += 1
 
     return deleted

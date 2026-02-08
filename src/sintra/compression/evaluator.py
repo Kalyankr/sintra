@@ -45,26 +45,26 @@ class AccuracyComparison:
 # Sample text for quick perplexity evaluation
 # From WikiText-2 test set (public domain)
 EVAL_TEXT = """
-The game began development in 2010, carrying over a large portion of the work 
-done on the original game. The game's development was handled by Intelligent 
-Systems, with Masahiro Sakurai serving as the main director. The game was 
-announced at E3 2011, with a tentative release window of 2012. The game was 
-released in Japan on July 28, 2012, in North America on August 19, 2012, in 
-Europe on August 31, 2012, and in Australia on September 13, 2012. The game 
-received generally positive reviews from critics, who praised the gameplay 
+The game began development in 2010, carrying over a large portion of the work
+done on the original game. The game's development was handled by Intelligent
+Systems, with Masahiro Sakurai serving as the main director. The game was
+announced at E3 2011, with a tentative release window of 2012. The game was
+released in Japan on July 28, 2012, in North America on August 19, 2012, in
+Europe on August 31, 2012, and in Australia on September 13, 2012. The game
+received generally positive reviews from critics, who praised the gameplay
 and graphics but criticized the story and characters.
 
-The tower is located in the center of the city, and is the tallest building 
-in the country. It was designed by the architect John Smith and was completed 
-in 1995. The tower has 50 floors and is used for offices and retail space. 
-The observation deck on the top floor offers panoramic views of the city and 
-surrounding areas. The tower has become an iconic landmark and is a popular 
+The tower is located in the center of the city, and is the tallest building
+in the country. It was designed by the architect John Smith and was completed
+in 1995. The tower has 50 floors and is used for offices and retail space.
+The observation deck on the top floor offers panoramic views of the city and
+surrounding areas. The tower has become an iconic landmark and is a popular
 tourist attraction.
 
-Machine learning is a subset of artificial intelligence that enables computers 
-to learn from data without being explicitly programmed. It has applications in 
-image recognition, natural language processing, and recommendation systems. 
-Deep learning, a more advanced form of machine learning, uses neural networks 
+Machine learning is a subset of artificial intelligence that enables computers
+to learn from data without being explicitly programmed. It has applications in
+image recognition, natural language processing, and recommendation systems.
+Deep learning, a more advanced form of machine learning, uses neural networks
 with multiple layers to analyze complex patterns in data.
 """
 
@@ -152,53 +152,11 @@ class AccuracyEvaluator:
     def _calculate_perplexity(self, llm: Llama, text: str) -> float:
         """Calculate perplexity on text.
 
-        Perplexity = exp(average negative log likelihood)
+        Uses a generation-based coherence heuristic since llama-cpp-python
+        doesn't expose per-token log probabilities efficiently.
+        Avoids the expensive per-token reset/eval loop.
         """
-        # Tokenize the text
-        tokens = llm.tokenize(text.encode("utf-8"))
-
-        if len(tokens) < 2:
-            raise EvaluationError("Text too short for perplexity calculation")
-
-        # Limit to context window
-        tokens = tokens[: self.n_ctx]
-
-        # Calculate log likelihood
-        total_log_prob = 0.0
-        n_tokens = 0
-
-        # Process in chunks to handle context window
-        chunk_size = min(256, self.n_ctx - 1)
-
-        for i in range(0, len(tokens) - 1, chunk_size):
-            chunk = tokens[i : i + chunk_size + 1]
-
-            # Get log probabilities for each token
-            llm.reset()
-            llm.eval(chunk[:-1])
-
-            # Get logits for last position
-            # Note: llama-cpp-python doesn't expose per-token logprobs easily
-            # so we approximate with a simpler method
-            for j in range(min(len(chunk) - 1, chunk_size)):
-                if i + j + 1 < len(tokens):
-                    # Evaluate and get logits
-                    context = tokens[: i + j + 1]
-                    if len(context) > self.n_ctx:
-                        context = context[-self.n_ctx :]
-
-                    llm.reset()
-                    llm.eval(context)
-
-                    # Get log probability of next token
-                    # Using a simplified approach since full logprobs are complex
-                    n_tokens += 1
-
-        # Simplified perplexity estimation based on model size/quantization
-        # This is a reasonable approximation when exact logprobs aren't available
-        # Real implementation would use llama.cpp's perplexity tool
-
-        # For now, run a generation and measure quality heuristically
+        # Run a generation and measure quality heuristically
         output = llm(
             "The capital of France is",
             max_tokens=20,
@@ -210,8 +168,6 @@ class AccuracyEvaluator:
 
         # Heuristic: check if response is coherent
         # Better models give more coherent completions
-        coherence_score = 1.0
-
         if "paris" in generated:
             coherence_score = 1.0
         elif any(word in generated for word in ["city", "capital", "france"]):

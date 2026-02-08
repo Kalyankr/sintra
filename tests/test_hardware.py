@@ -68,13 +68,15 @@ class TestDetectSystemName:
 
     def test_includes_cpu_count_and_ram(self):
         """Should include CPU count and RAM in name."""
-        with patch("platform.system", return_value="Linux"):
-            with patch("psutil.cpu_count", return_value=8):
-                with patch("psutil.virtual_memory") as mock_mem:
-                    mock_mem.return_value.total = 16 * 1024**3  # 16GB
-                    name = detect_system_name()
-                    assert "8 cores" in name
-                    assert "16GB" in name
+        with (
+            patch("platform.system", return_value="Linux"),
+            patch("psutil.cpu_count", return_value=8),
+            patch("psutil.virtual_memory") as mock_mem,
+        ):
+            mock_mem.return_value.total = 16 * 1024**3  # 16GB
+            name = detect_system_name()
+            assert "8 cores" in name
+            assert "16GB" in name
 
 
 class TestDetectSupportedQuantizations:

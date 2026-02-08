@@ -179,7 +179,7 @@ def _estimate_parameters(
     embed_params = vocab_size * hidden_size * 2  # input + output embeddings
 
     # Per-layer parameters (attention + MLP)
-    _head_dim = hidden_size // num_heads  # noqa: F841  # Kept for documentation
+    _head_dim = hidden_size // num_heads  # Kept for documentation
     attn_params = 4 * hidden_size * hidden_size  # Q, K, V, O projections
     mlp_params = 3 * hidden_size * (4 * hidden_size)  # up, gate, down (for LLaMA-style)
     layer_params = attn_params + mlp_params
@@ -666,15 +666,15 @@ def _lookup_from_history(model_family: str, bits: int) -> dict[str, Any] | None:
 
         # Query for successful runs matching model family and bits
         query = """
-            SELECT 
+            SELECT
                 model_id,
                 hardware_profile,
                 bits,
                 actual_tps,
                 accuracy_score,
                 pruning_ratio
-            FROM optimization_history 
-            WHERE model_id LIKE ? 
+            FROM optimization_history
+            WHERE model_id LIKE ?
             AND bits = ?
             AND was_successful = 1
             ORDER BY created_at DESC

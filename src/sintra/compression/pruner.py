@@ -9,6 +9,7 @@ Both operations are applied to HuggingFace models BEFORE GGUF conversion.
 
 import json
 import logging
+import re
 import shutil
 from pathlib import Path
 
@@ -20,6 +21,60 @@ logger = logging.getLogger(__name__)
 
 # Default cache directory
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "sintra"
+
+
+# Pre-compiled regex patterns for layer index extraction (shared by dropper & pruner)
+_LAYER_INDEX_PATTERNS = [
+    re.compile(r"\.layers\.(\d+)\."),  # Llama, Mistral, etc.
+    re.compile(r"\.h\.(\d+)\."),  # GPT-2, GPT-J
+    re.compile(r"\.layer\.(\d+)\."),  # BERT, RoBERTa
+    re.compile(r"\.blocks\.(\d+)\."),  # Some vision models
+    re.compile(r"\.transformer\.(\d+)\."),  # Some architectures
+]
+
+# Pre-compiled replacement patterns (old_pattern, format_string)
+_LAYER_REPLACE_PATTERNS = [
+    (re.compile(r"\.layers\.(\d+)\."), ".layers.{}."),
+    (re.compile(r"\.h\.(\d+)\."), ".h.{}."),
+    (re.compile(r"\.layer\.(\d+)\."), ".layer.{}."),
+    (re.compile(r"\.blocks\.(\d+)\."), ".blocks.{}."),
+    (re.compile(r"\.transformer\.(\d+)\."), ".transformer.{}."),
+]
+
+
+def _extract_layer_index(key: str) -> int | None:
+    """Extract layer index from a tensor key.
+
+    Handles various naming conventions:
+    - model.layers.0.self_attn.q_proj.weight (Llama)
+    - transformer.h.0.attn.c_attn.weight (GPT-2)
+    - encoder.layer.0.attention.self.query.weight (BERT)
+    """
+    for pattern in _LAYER_INDEX_PATTERNS:
+        match = pattern.search(key)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _replace_layer_index(key: str, old_idx: int, new_idx: int) -> str:
+    """Replace layer index in a tensor key."""
+    for pattern, fmt in _LAYER_REPLACE_PATTERNS:
+        match = pattern.search(key)
+        if match and int(match.group(1)) == old_idx:
+            return pattern.sub(fmt.format(new_idx), key)
+    return key
+
+
+def _copy_non_weight_files(src: Path, dst: Path) -> None:
+    """Copy config and other non-weight files between model directories."""
+    for file in src.iterdir():
+        if (
+            file.is_file()
+            and file.suffix not in [".safetensors", ".bin"]
+            and file.name not in ["model.safetensors.index.json"]
+        ):
+            shutil.copy2(file, dst / file.name)
 
 
 class PruningError(Exception):
@@ -139,7 +194,7 @@ class LayerDropper:
         num_layers = config.num_layers
 
         # Validate layer indices
-        invalid_layers = [l for l in layers_to_drop if l < 0 or l >= num_layers]
+        invalid_layers = [idx for idx in layers_to_drop if idx < 0 or idx >= num_layers]
         if invalid_layers:
             raise PruningError(
                 f"Invalid layer indices {invalid_layers}. "
@@ -189,10 +244,7 @@ class LayerDropper:
 
     def _copy_non_weight_files(self, src: Path, dst: Path):
         """Copy config and other non-weight files."""
-        for file in src.iterdir():
-            if file.is_file() and file.suffix not in [".safetensors", ".bin"]:
-                if file.name not in ["model.safetensors.index.json"]:
-                    shutil.copy2(file, dst / file.name)
+        _copy_non_weight_files(src, dst)
 
     def _drop_layers_from_weights(
         self,
@@ -235,11 +287,11 @@ class LayerDropper:
 
         for wf in weight_files:
             with safe_open(wf, framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f:
                     tensor = f.get_tensor(key)
 
                     # Check if this tensor belongs to a layer we want to drop
-                    layer_idx = self._extract_layer_index(key)
+                    layer_idx = _extract_layer_index(key)
 
                     if layer_idx is not None:
                         if layer_idx in layers_to_drop:
@@ -248,7 +300,7 @@ class LayerDropper:
                         else:
                             # Renumber the layer in the key
                             new_idx = layer_mapping[layer_idx]
-                            new_key = self._replace_layer_index(key, layer_idx, new_idx)
+                            new_key = _replace_layer_index(key, layer_idx, new_idx)
                             all_tensors[new_key] = tensor
                     else:
                         # Non-layer tensor (embeddings, final norm, etc.)
@@ -274,14 +326,14 @@ class LayerDropper:
             state_dict = torch.load(bf, map_location="cpu", weights_only=True)
 
             for key, tensor in state_dict.items():
-                layer_idx = self._extract_layer_index(key)
+                layer_idx = _extract_layer_index(key)
 
                 if layer_idx is not None:
                     if layer_idx in layers_to_drop:
                         continue
                     else:
                         new_idx = layer_mapping[layer_idx]
-                        new_key = self._replace_layer_index(key, layer_idx, new_idx)
+                        new_key = _replace_layer_index(key, layer_idx, new_idx)
                         all_tensors[new_key] = tensor
                 else:
                     all_tensors[key] = tensor
@@ -292,49 +344,12 @@ class LayerDropper:
         logger.info(f"Saved {len(all_tensors)} tensors to {output_file}")
 
     def _extract_layer_index(self, key: str) -> int | None:
-        """Extract layer index from a tensor key.
-
-        Handles various naming conventions:
-        - model.layers.0.self_attn.q_proj.weight (Llama)
-        - transformer.h.0.attn.c_attn.weight (GPT-2)
-        - encoder.layer.0.attention.self.query.weight (BERT)
-        """
-        import re
-
-        # Common patterns for layer indices
-        patterns = [
-            r"\.layers\.(\d+)\.",  # Llama, Mistral, etc.
-            r"\.h\.(\d+)\.",  # GPT-2, GPT-J
-            r"\.layer\.(\d+)\.",  # BERT, RoBERTa
-            r"\.blocks\.(\d+)\.",  # Some vision models
-            r"\.transformer\.(\d+)\.",  # Some architectures
-        ]
-
-        for pattern in patterns:
-            match = re.search(pattern, key)
-            if match:
-                return int(match.group(1))
-
-        return None
+        """Extract layer index from a tensor key. Delegates to module-level function."""
+        return _extract_layer_index(key)
 
     def _replace_layer_index(self, key: str, old_idx: int, new_idx: int) -> str:
-        """Replace layer index in a tensor key."""
-        import re
-
-        patterns = [
-            (r"\.layers\.(\d+)\.", f".layers.{new_idx}."),
-            (r"\.h\.(\d+)\.", f".h.{new_idx}."),
-            (r"\.layer\.(\d+)\.", f".layer.{new_idx}."),
-            (r"\.blocks\.(\d+)\.", f".blocks.{new_idx}."),
-            (r"\.transformer\.(\d+)\.", f".transformer.{new_idx}."),
-        ]
-
-        for pattern, replacement in patterns:
-            match = re.search(pattern, key)
-            if match and int(match.group(1)) == old_idx:
-                return re.sub(pattern, replacement, key)
-
-        return key
+        """Replace layer index in a tensor key. Delegates to module-level function."""
+        return _replace_layer_index(key, old_idx, new_idx)
 
 
 class StructuredPruner:
@@ -432,10 +447,7 @@ class StructuredPruner:
 
     def _copy_non_weight_files(self, src: Path, dst: Path):
         """Copy config and other non-weight files."""
-        for file in src.iterdir():
-            if file.is_file() and file.suffix not in [".safetensors", ".bin"]:
-                if file.name not in ["model.safetensors.index.json"]:
-                    shutil.copy2(file, dst / file.name)
+        _copy_non_weight_files(src, dst)
 
     def _prune_safetensors(
         self,
@@ -449,7 +461,7 @@ class StructuredPruner:
 
         for wf in weight_files:
             with safe_open(wf, framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f:
                     tensor = f.get_tensor(key)
 
                     # Only prune weight matrices, not biases or norms

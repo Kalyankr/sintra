@@ -77,7 +77,7 @@ Your job is to:
 
 ### Failure Types
 - **speed**: TPS below target (need more aggressive compression)
-- **accuracy**: Accuracy below target (need less aggressive compression)  
+- **accuracy**: Accuracy below target (need less aggressive compression)
 - **memory**: VRAM exceeded limit
 - **crash**: Model failed to load/run
 

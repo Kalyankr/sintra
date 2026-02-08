@@ -91,17 +91,17 @@ class ModelDownloader:
             logger.info(f"Downloaded to {local_dir}")
             return local_dir
 
-        except RepositoryNotFoundError:
+        except RepositoryNotFoundError as e:
             raise DownloadError(
                 f"Model '{model_id}' not found on HuggingFace Hub. "
                 "Check the model ID at https://huggingface.co/models"
-            )
-        except GatedRepoError:
+            ) from e
+        except GatedRepoError as e:
             raise DownloadError(
                 f"Model '{model_id}' is gated. "
                 "Accept the license at https://huggingface.co/{model_id} "
                 "and provide a token with --hf-token"
-            )
+            ) from e
         except Exception as e:
             raise DownloadError(f"Failed to download '{model_id}': {e}") from e
 
@@ -109,18 +109,23 @@ class ModelDownloader:
         """Check if a model is fully downloaded.
 
         Verifies config.json and at least one weight file exists.
+        Uses lazy evaluation to avoid scanning entire directories.
         """
         if not path.exists():
             return False
 
         has_config = (path / "config.json").exists()
+        if not has_config:
+            return False
+
+        # Use generators with any() for early exit — no need to build full lists
         has_weights = (
-            list(path.glob("*.safetensors"))
-            or list(path.glob("*.bin"))
-            or list(path.glob("*.pt"))
+            any(path.glob("*.safetensors"))
+            or any(path.glob("*.bin"))
+            or any(path.glob("*.pt"))
         )
 
-        return has_config and bool(has_weights)
+        return has_weights
 
     def get_model_info(self, model_id: str) -> dict:
         """Get model metadata from HuggingFace Hub.
