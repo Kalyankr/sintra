@@ -80,17 +80,32 @@ class HistoryDB:
         """
         self.db_path = db_path or DEFAULT_DB_PATH
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # Use a persistent connection instead of open/close per operation
+        self._conn: sqlite3.Connection | None = None
         self._init_db()
 
     @contextmanager
     def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
-        """Get a database connection with proper cleanup."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        """Get a database connection, reusing the persistent one.
+        
+        Uses WAL journal mode for better concurrent read/write performance.
+        """
+        if self._conn is None:
+            self._conn = sqlite3.connect(self.db_path)
+            self._conn.row_factory = sqlite3.Row
+            # WAL mode allows concurrent reads while writing
+            self._conn.execute("PRAGMA journal_mode=WAL")
         try:
-            yield conn
-        finally:
-            conn.close()
+            yield self._conn
+        except Exception:
+            self._conn.rollback()
+            raise
+
+    def close(self) -> None:
+        """Close the persistent database connection."""
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
     def _init_db(self) -> None:
         """Initialize database schema."""
