@@ -109,18 +109,23 @@ class ModelDownloader:
         """Check if a model is fully downloaded.
 
         Verifies config.json and at least one weight file exists.
+        Uses lazy evaluation to avoid scanning entire directories.
         """
         if not path.exists():
             return False
 
         has_config = (path / "config.json").exists()
+        if not has_config:
+            return False
+
+        # Use generators with any() for early exit — no need to build full lists
         has_weights = (
-            list(path.glob("*.safetensors"))
-            or list(path.glob("*.bin"))
-            or list(path.glob("*.pt"))
+            any(path.glob("*.safetensors"))
+            or any(path.glob("*.bin"))
+            or any(path.glob("*.pt"))
         )
 
-        return has_config and bool(has_weights)
+        return has_weights
 
     def get_model_info(self, model_id: str) -> dict:
         """Get model metadata from HuggingFace Hub.

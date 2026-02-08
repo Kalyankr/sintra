@@ -28,6 +28,7 @@ import shutil
 import subprocess
 import sys
 from enum import Enum
+from functools import lru_cache
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,16 @@ LLAMA_CPP_INSTALL_INSTRUCTIONS = """
 """
 
 
-def _get_convert_script_paths() -> list[Path]:
+@lru_cache(maxsize=1)
+def _get_convert_script_paths() -> tuple[Path, ...]:
     """Get all possible paths where convert_hf_to_gguf.py might be installed.
 
     Searches:
     - Standard llama.cpp clone locations
     - Python site-packages (from llama-cpp-python pip package)
     - Current virtualenv
+
+    Returns a tuple (hashable) so this function can be cached.
     """
 
     paths = [
@@ -91,11 +95,14 @@ def _get_convert_script_paths() -> list[Path]:
         env_script = Path(llama_cpp_path) / "convert_hf_to_gguf.py"
         paths.insert(0, env_script)
 
-    return paths
+    return tuple(paths)
 
 
+@lru_cache(maxsize=1)
 def check_llama_cpp_available() -> tuple[bool, str]:
     """Check if llama.cpp is properly installed.
+
+    Result is cached since tool availability doesn't change during process lifetime.
 
     Returns:
         Tuple of (is_available, message)
