@@ -5,6 +5,7 @@ import os
 import random
 import subprocess
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from sintra.profiles.models import ExperimentResult, HardwareProfile, ModelRecipe
 from sintra.ui.console import console, log_transition
@@ -32,6 +33,19 @@ class BenchmarkExecutor(ABC):
 
 
 class StandaloneExecutor(BenchmarkExecutor):
+    # Class-level cache for worker script path
+    _worker_script: Path | None = None
+
+    @classmethod
+    def _get_worker_script(cls) -> Path:
+        """Get worker script path, cached after first lookup."""
+        if cls._worker_script is None:
+            import pathlib
+            import sintra
+            package_dir = pathlib.Path(sintra.__file__).parent
+            cls._worker_script = package_dir / "benchmarks" / "worker" / "runner.py"
+        return cls._worker_script
+
     def run_benchmark(
         self, recipe: ModelRecipe, profile: HardwareProfile
     ) -> ExperimentResult:
@@ -45,13 +59,7 @@ class StandaloneExecutor(BenchmarkExecutor):
         env = os.environ.copy()
         env["VRAM_LIMIT_GB"] = str(profile.constraints.vram_gb)
 
-        # Find the worker script
-        import pathlib
-
-        import sintra
-
-        package_dir = pathlib.Path(sintra.__file__).parent
-        worker_script = package_dir / "benchmarks" / "worker" / "runner.py"
+        worker_script = self._get_worker_script()
 
         if not worker_script.exists():
             return self._error_result(
