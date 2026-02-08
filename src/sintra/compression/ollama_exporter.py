@@ -68,7 +68,10 @@ def is_ollama_available() -> tuple[bool, str]:
         if result.returncode == 0:
             return True, "Ollama is installed and running"
         else:
-            return False, f"Ollama is installed but not running: {result.stderr.strip()}"
+            return (
+                False,
+                f"Ollama is installed but not running: {result.stderr.strip()}",
+            )
     except subprocess.TimeoutExpired:
         return False, "Ollama timed out - may not be running (try: ollama serve)"
     except Exception as e:
@@ -230,13 +233,13 @@ class OllamaExporter:
                     message=error_msg,
                 )
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             raise OllamaExportError(
                 f"Ollama create timed out after {self.timeout}s. "
                 "Try increasing timeout or check if Ollama is running."
-            )
+            ) from e
         except Exception as e:
-            raise OllamaExportError(f"Failed to create Ollama model: {e}")
+            raise OllamaExportError(f"Failed to create Ollama model: {e}") from e
 
     def _list_models(self) -> list[str]:
         """List existing Ollama models."""

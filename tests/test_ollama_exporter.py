@@ -1,14 +1,13 @@
 """Tests for Ollama exporter."""
 
 import subprocess
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from sintra.compression.ollama_exporter import (
-    OllamaExportError,
     OllamaExporter,
+    OllamaExportError,
     OllamaExportResult,
     export_to_ollama,
     generate_modelfile,
@@ -28,32 +27,36 @@ class TestIsOllamaAvailable:
 
     def test_returns_true_when_available(self):
         """Test that returns True when ollama is running."""
-        with patch("shutil.which", return_value="/usr/bin/ollama"):
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                available, message = is_ollama_available()
-                assert available is True
-                assert "running" in message.lower()
+        with (
+            patch("shutil.which", return_value="/usr/bin/ollama"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            available, message = is_ollama_available()
+            assert available is True
+            assert "running" in message.lower()
 
     def test_returns_false_when_not_running(self):
         """Test that returns False when ollama is installed but not running."""
-        with patch("shutil.which", return_value="/usr/bin/ollama"):
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(
-                    returncode=1, stderr="connection refused"
-                )
-                available, message = is_ollama_available()
-                assert available is False
-                assert "not running" in message.lower()
+        with (
+            patch("shutil.which", return_value="/usr/bin/ollama"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=1, stderr="connection refused")
+            available, message = is_ollama_available()
+            assert available is False
+            assert "not running" in message.lower()
 
     def test_handles_timeout(self):
         """Test that handles timeout gracefully."""
-        with patch("shutil.which", return_value="/usr/bin/ollama"):
-            with patch("subprocess.run") as mock_run:
-                mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
-                available, message = is_ollama_available()
-                assert available is False
-                assert "timed out" in message.lower()
+        with (
+            patch("shutil.which", return_value="/usr/bin/ollama"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
+            available, message = is_ollama_available()
+            assert available is False
+            assert "timed out" in message.lower()
 
 
 class TestGenerateModelfile:
@@ -92,7 +95,7 @@ class TestOllamaExporter:
             "sintra.compression.ollama_exporter.is_ollama_available",
             return_value=(True, "OK"),
         ):
-            available, msg = exporter.check_availability()
+            available, _msg = exporter.check_availability()
             assert available is True
 
     def test_export_validates_gguf_path(self, tmp_path):
@@ -134,14 +137,16 @@ class TestOllamaExporter:
         gguf_file = tmp_path / "model.gguf"
         gguf_file.touch()
 
-        with patch(
-            "sintra.compression.ollama_exporter.is_ollama_available",
-            return_value=(True, "OK"),
+        with (
+            patch(
+                "sintra.compression.ollama_exporter.is_ollama_available",
+                return_value=(True, "OK"),
+            ),
+            patch.object(exporter, "_list_models", return_value=[]),
+            patch("subprocess.run") as mock_run,
         ):
-            with patch.object(exporter, "_list_models", return_value=[]):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0)
-                    result = exporter.export(gguf_file, "test-model")
+            mock_run.return_value = MagicMock(returncode=0)
+            result = exporter.export(gguf_file, "test-model")
 
         assert result.success is True
         assert result.model_name == "test-model"
@@ -152,14 +157,16 @@ class TestOllamaExporter:
         gguf_file = tmp_path / "model.gguf"
         gguf_file.touch()
 
-        with patch(
-            "sintra.compression.ollama_exporter.is_ollama_available",
-            return_value=(True, "OK"),
+        with (
+            patch(
+                "sintra.compression.ollama_exporter.is_ollama_available",
+                return_value=(True, "OK"),
+            ),
+            patch.object(exporter, "_list_models", return_value=["test-model"]),
+            patch("subprocess.run") as mock_run,
         ):
-            with patch.object(exporter, "_list_models", return_value=["test-model"]):
-                with patch("subprocess.run") as mock_run:
-                    mock_run.return_value = MagicMock(returncode=0)
-                    result = exporter.export(gguf_file, "test-model", force=True)
+            mock_run.return_value = MagicMock(returncode=0)
+            result = exporter.export(gguf_file, "test-model", force=True)
 
         assert result.success is True
 
@@ -172,13 +179,15 @@ class TestExportToOllamaConvenience:
         gguf_file = tmp_path / "model.gguf"
         gguf_file.touch()
 
-        with patch(
-            "sintra.compression.ollama_exporter.is_ollama_available",
-            return_value=(True, "OK"),
+        with (
+            patch(
+                "sintra.compression.ollama_exporter.is_ollama_available",
+                return_value=(True, "OK"),
+            ),
+            patch("subprocess.run") as mock_run,
         ):
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0)
-                result = export_to_ollama(gguf_file, "test-model", force=True)
+            mock_run.return_value = MagicMock(returncode=0)
+            result = export_to_ollama(gguf_file, "test-model", force=True)
 
         assert isinstance(result, OllamaExportResult)
 

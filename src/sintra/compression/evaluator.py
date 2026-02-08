@@ -45,26 +45,26 @@ class AccuracyComparison:
 # Sample text for quick perplexity evaluation
 # From WikiText-2 test set (public domain)
 EVAL_TEXT = """
-The game began development in 2010, carrying over a large portion of the work 
-done on the original game. The game's development was handled by Intelligent 
-Systems, with Masahiro Sakurai serving as the main director. The game was 
-announced at E3 2011, with a tentative release window of 2012. The game was 
-released in Japan on July 28, 2012, in North America on August 19, 2012, in 
-Europe on August 31, 2012, and in Australia on September 13, 2012. The game 
-received generally positive reviews from critics, who praised the gameplay 
+The game began development in 2010, carrying over a large portion of the work
+done on the original game. The game's development was handled by Intelligent
+Systems, with Masahiro Sakurai serving as the main director. The game was
+announced at E3 2011, with a tentative release window of 2012. The game was
+released in Japan on July 28, 2012, in North America on August 19, 2012, in
+Europe on August 31, 2012, and in Australia on September 13, 2012. The game
+received generally positive reviews from critics, who praised the gameplay
 and graphics but criticized the story and characters.
 
-The tower is located in the center of the city, and is the tallest building 
-in the country. It was designed by the architect John Smith and was completed 
-in 1995. The tower has 50 floors and is used for offices and retail space. 
-The observation deck on the top floor offers panoramic views of the city and 
-surrounding areas. The tower has become an iconic landmark and is a popular 
+The tower is located in the center of the city, and is the tallest building
+in the country. It was designed by the architect John Smith and was completed
+in 1995. The tower has 50 floors and is used for offices and retail space.
+The observation deck on the top floor offers panoramic views of the city and
+surrounding areas. The tower has become an iconic landmark and is a popular
 tourist attraction.
 
-Machine learning is a subset of artificial intelligence that enables computers 
-to learn from data without being explicitly programmed. It has applications in 
-image recognition, natural language processing, and recommendation systems. 
-Deep learning, a more advanced form of machine learning, uses neural networks 
+Machine learning is a subset of artificial intelligence that enables computers
+to learn from data without being explicitly programmed. It has applications in
+image recognition, natural language processing, and recommendation systems.
+Deep learning, a more advanced form of machine learning, uses neural networks
 with multiple layers to analyze complex patterns in data.
 """
 

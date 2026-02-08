@@ -12,6 +12,8 @@ Advanced backends (optional):
 - Optimum/ONNX: pip install sintra[onnx]
 """
 
+import contextlib
+
 from .downloader import ModelDownloader, download_model
 from .evaluator import (
     AccuracyComparison,
@@ -39,26 +41,22 @@ from .quantizer import (
 )
 
 # Optional backends - import only if available
-try:
-    from .bnb_quantizer import (
+with contextlib.suppress(ImportError):
+    from .bnb_quantizer import (  # noqa: F401
         BitsAndBytesError,
         BitsAndBytesQuantizer,
         BnBQuantType,
         is_bnb_available,
     )
-except ImportError:
-    pass
 
-try:
-    from .onnx_optimizer import (
+with contextlib.suppress(ImportError):
+    from .onnx_optimizer import (  # noqa: F401
         ONNXOptimizer,
         ONNXOptimizerError,
         OptimizationLevel,
         QuantizationMode,
         is_onnx_available,
     )
-except ImportError:
-    pass
 
 # Ollama exporter (always available)
 from .ollama_exporter import (
@@ -70,31 +68,29 @@ from .ollama_exporter import (
 )
 
 __all__ = [
-    # Downloader
-    "ModelDownloader",
-    "download_model",
-    # GGUF Quantizer (llama.cpp)
-    "GGUFQuantizer",
-    "QuantizationType",
-    "quantize_model",
-    "quantize_with_compression",
-    # Pruner
-    "LayerDropper",
-    "StructuredPruner",
-    "PruningError",
-    "drop_layers",
-    "prune_model",
-    "apply_compression",
-    # Evaluator
-    "AccuracyEvaluator",
+    "LLAMA_CPP_INSTALL_INSTRUCTIONS",
     "AccuracyComparison",
-    "evaluate_perplexity",
-    "compare_accuracy",
-    "evaluate_with_baseline",
-    # Ollama Exporter
-    "OllamaExporter",
+    "AccuracyEvaluator",
+    "GGUFQuantizer",
+    "LayerDropper",
+    "ModelDownloader",
     "OllamaExportError",
     "OllamaExportResult",
+    "OllamaExporter",
+    "PruningError",
+    "QuantizationError",
+    "QuantizationType",
+    "StructuredPruner",
+    "apply_compression",
+    "check_llama_cpp_available",
+    "compare_accuracy",
+    "download_model",
+    "drop_layers",
+    "evaluate_perplexity",
+    "evaluate_with_baseline",
     "export_to_ollama",
     "is_ollama_available",
+    "prune_model",
+    "quantize_model",
+    "quantize_with_compression",
 ]

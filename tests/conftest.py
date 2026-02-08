@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _clear_hardware_caches():
     """Clear lru_cache on hardware detection functions between tests.
-    
+
     These functions are cached for runtime efficiency but tests need
     to mock them independently.
     """

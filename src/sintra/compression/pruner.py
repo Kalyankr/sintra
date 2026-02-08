@@ -25,20 +25,20 @@ DEFAULT_CACHE_DIR = Path.home() / ".cache" / "sintra"
 
 # Pre-compiled regex patterns for layer index extraction (shared by dropper & pruner)
 _LAYER_INDEX_PATTERNS = [
-    re.compile(r"\.layers\.(\d+)\."),   # Llama, Mistral, etc.
-    re.compile(r"\.h\.(\d+)\."),        # GPT-2, GPT-J
-    re.compile(r"\.layer\.(\d+)\."),     # BERT, RoBERTa
-    re.compile(r"\.blocks\.(\d+)\."),    # Some vision models
+    re.compile(r"\.layers\.(\d+)\."),  # Llama, Mistral, etc.
+    re.compile(r"\.h\.(\d+)\."),  # GPT-2, GPT-J
+    re.compile(r"\.layer\.(\d+)\."),  # BERT, RoBERTa
+    re.compile(r"\.blocks\.(\d+)\."),  # Some vision models
     re.compile(r"\.transformer\.(\d+)\."),  # Some architectures
 ]
 
 # Pre-compiled replacement patterns (old_pattern, format_string)
 _LAYER_REPLACE_PATTERNS = [
-    (re.compile(r"\.layers\.(\d+)\."), ".layers.{}." ),
-    (re.compile(r"\.h\.(\d+)\."), ".h.{}." ),
-    (re.compile(r"\.layer\.(\d+)\."), ".layer.{}." ),
-    (re.compile(r"\.blocks\.(\d+)\."), ".blocks.{}." ),
-    (re.compile(r"\.transformer\.(\d+)\."), ".transformer.{}." ),
+    (re.compile(r"\.layers\.(\d+)\."), ".layers.{}."),
+    (re.compile(r"\.h\.(\d+)\."), ".h.{}."),
+    (re.compile(r"\.layer\.(\d+)\."), ".layer.{}."),
+    (re.compile(r"\.blocks\.(\d+)\."), ".blocks.{}."),
+    (re.compile(r"\.transformer\.(\d+)\."), ".transformer.{}."),
 ]
 
 
@@ -69,9 +69,12 @@ def _replace_layer_index(key: str, old_idx: int, new_idx: int) -> str:
 def _copy_non_weight_files(src: Path, dst: Path) -> None:
     """Copy config and other non-weight files between model directories."""
     for file in src.iterdir():
-        if file.is_file() and file.suffix not in [".safetensors", ".bin"]:
-            if file.name not in ["model.safetensors.index.json"]:
-                shutil.copy2(file, dst / file.name)
+        if (
+            file.is_file()
+            and file.suffix not in [".safetensors", ".bin"]
+            and file.name not in ["model.safetensors.index.json"]
+        ):
+            shutil.copy2(file, dst / file.name)
 
 
 class PruningError(Exception):
@@ -191,7 +194,7 @@ class LayerDropper:
         num_layers = config.num_layers
 
         # Validate layer indices
-        invalid_layers = [l for l in layers_to_drop if l < 0 or l >= num_layers]
+        invalid_layers = [idx for idx in layers_to_drop if idx < 0 or idx >= num_layers]
         if invalid_layers:
             raise PruningError(
                 f"Invalid layer indices {invalid_layers}. "
@@ -284,7 +287,7 @@ class LayerDropper:
 
         for wf in weight_files:
             with safe_open(wf, framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f:
                     tensor = f.get_tensor(key)
 
                     # Check if this tensor belongs to a layer we want to drop
@@ -458,7 +461,7 @@ class StructuredPruner:
 
         for wf in weight_files:
             with safe_open(wf, framework="pt", device="cpu") as f:
-                for key in f.keys():
+                for key in f:
                     tensor = f.get_tensor(key)
 
                     # Only prune weight matrices, not biases or norms

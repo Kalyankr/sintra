@@ -41,7 +41,9 @@ class StandaloneExecutor(BenchmarkExecutor):
         """Get worker script path, cached after first lookup."""
         if cls._worker_script is None:
             import pathlib
+
             import sintra
+
             package_dir = pathlib.Path(sintra.__file__).parent
             cls._worker_script = package_dir / "benchmarks" / "worker" / "runner.py"
         return cls._worker_script

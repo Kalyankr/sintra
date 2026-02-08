@@ -10,7 +10,6 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from sintra.profiles.models import ExperimentResult, HardwareProfile, ModelRecipe
 
@@ -87,7 +86,7 @@ class HistoryDB:
     @contextmanager
     def _get_connection(self) -> Generator[sqlite3.Connection, None, None]:
         """Get a database connection, reusing the persistent one.
-        
+
         Uses WAL journal mode for better concurrent read/write performance.
         """
         if self._conn is None:
@@ -119,34 +118,34 @@ class HistoryDB:
                     hardware_name TEXT NOT NULL,
                     backend TEXT NOT NULL,
                     iteration INTEGER DEFAULT 0,
-                    
+
                     -- Recipe fields
                     bits INTEGER NOT NULL,
                     pruning_ratio REAL NOT NULL,
                     layers_to_drop TEXT NOT NULL,  -- JSON array
                     method TEXT NOT NULL,
-                    
+
                     -- Result fields
                     actual_tps REAL NOT NULL,
                     actual_vram_usage REAL NOT NULL,
                     accuracy_score REAL NOT NULL,
                     was_successful INTEGER NOT NULL,
                     error_log TEXT,
-                    
+
                     -- Metadata
                     created_at TEXT NOT NULL,
-                    
+
                     -- Indexes for common queries
                     UNIQUE(run_id, iteration)
                 );
-                
-                CREATE INDEX IF NOT EXISTS idx_model_hardware 
+
+                CREATE INDEX IF NOT EXISTS idx_model_hardware
                     ON experiments(model_id, hardware_name);
-                CREATE INDEX IF NOT EXISTS idx_successful 
+                CREATE INDEX IF NOT EXISTS idx_successful
                     ON experiments(was_successful);
-                CREATE INDEX IF NOT EXISTS idx_created 
+                CREATE INDEX IF NOT EXISTS idx_created
                     ON experiments(created_at);
-                
+
                 -- Runs table: stores run-level metadata
                 CREATE TABLE IF NOT EXISTS runs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -162,8 +161,8 @@ class HistoryDB:
                     best_recipe TEXT,  -- JSON
                     status TEXT DEFAULT 'running'  -- running, completed, failed, interrupted
                 );
-                
-                CREATE INDEX IF NOT EXISTS idx_run_status 
+
+                CREATE INDEX IF NOT EXISTS idx_run_status
                     ON runs(status);
             """)
             conn.commit()
@@ -198,7 +197,7 @@ class HistoryDB:
                 INSERT INTO experiments (
                     run_id, model_id, hardware_name, backend, iteration,
                     bits, pruning_ratio, layers_to_drop, method,
-                    actual_tps, actual_vram_usage, accuracy_score, 
+                    actual_tps, actual_vram_usage, accuracy_score,
                     was_successful, error_log, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -355,7 +354,7 @@ class HistoryDB:
             row = conn.execute(
                 """
                 SELECT * FROM experiments
-                WHERE model_id = ? 
+                WHERE model_id = ?
                   AND hardware_name = ?
                   AND was_successful = 1
                 ORDER BY accuracy_score DESC

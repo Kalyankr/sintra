@@ -298,10 +298,10 @@ class GGUFQuantizer:
             logger.info(f"Converted to {output_file}")
             return output_file
 
-        except subprocess.TimeoutExpired:
-            raise QuantizationError("GGUF conversion timed out (10 min limit)")
-        except FileNotFoundError:
-            raise QuantizationError("python3 not found")
+        except subprocess.TimeoutExpired as e:
+            raise QuantizationError("GGUF conversion timed out (10 min limit)") from e
+        except FileNotFoundError as e:
+            raise QuantizationError("python3 not found") from e
 
     def quantize(
         self,
@@ -396,8 +396,8 @@ class GGUFQuantizer:
             logger.info(f"Quantized to {output_file}")
             return output_file
 
-        except subprocess.TimeoutExpired:
-            raise QuantizationError("Quantization timed out (30 min limit)")
+        except subprocess.TimeoutExpired as e:
+            raise QuantizationError("Quantization timed out (30 min limit)") from e
 
     def get_cached_quantizations(self, model_name: str) -> list[Path]:
         """List cached quantizations for a model."""

@@ -33,17 +33,19 @@ class SintraRunner:
         )
 
         # Structured Pruning: Removing specified layers
-        if layers_to_drop:
-            # logic targets standard Llama/Mistral architectures
-            if hasattr(model, "model") and hasattr(model.model, "layers"):
-                current_layers = model.model.layers
-                model.model.layers = torch.nn.ModuleList(
-                    [
-                        layer
-                        for i, layer in enumerate(current_layers)
-                        if i not in layers_to_drop
-                    ]
-                )
+        if (
+            layers_to_drop
+            and hasattr(model, "model")
+            and hasattr(model.model, "layers")
+        ):
+            current_layers = model.model.layers
+            model.model.layers = torch.nn.ModuleList(
+                [
+                    layer
+                    for i, layer in enumerate(current_layers)
+                    if i not in layers_to_drop
+                ]
+            )
 
         return model
 

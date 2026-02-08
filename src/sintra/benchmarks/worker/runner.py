@@ -54,7 +54,7 @@ def download_and_quantize(
     try:
         model_path = downloader.download(model_id)
     except DownloadError as e:
-        raise RuntimeError(f"Download failed: {e}")
+        raise RuntimeError(f"Download failed: {e}") from e
 
     # Log compression settings
     compression_info = f"{bits}-bit"
@@ -83,7 +83,7 @@ def download_and_quantize(
 
         return str(quantized_path)
     except QuantizationError as e:
-        raise RuntimeError(f"Quantization failed: {e}")
+        raise RuntimeError(f"Quantization failed: {e}") from e
 
 
 def quantize_with_bnb(
@@ -119,7 +119,7 @@ def quantize_with_bnb(
         )
         return str(output_path)
     except BitsAndBytesError as e:
-        raise RuntimeError(f"BitsAndBytes quantization failed: {e}")
+        raise RuntimeError(f"BitsAndBytes quantization failed: {e}") from e
 
 
 def quantize_with_onnx(
@@ -154,7 +154,7 @@ def quantize_with_onnx(
         )
         return str(output_path)
     except ONNXOptimizerError as e:
-        raise RuntimeError(f"ONNX optimization failed: {e}")
+        raise RuntimeError(f"ONNX optimization failed: {e}") from e
 
 
 def evaluate_accuracy(model_path: str) -> float:
@@ -232,7 +232,7 @@ def run_transformers_benchmark(
     import torch
 
     process = psutil.Process()
-    start_mem = process.memory_info().rss
+    _ = process.memory_info().rss  # warm up memory tracking
 
     sys.stderr.write(
         f"Worker [{backend.upper()}]: Loading model from {model_path}...\n"
@@ -344,7 +344,7 @@ def run_benchmark(
         ExperimentResult with measured metrics
     """
     process = psutil.Process()
-    start_mem = process.memory_info().rss
+    _ = process.memory_info().rss  # warm up memory tracking
 
     sys.stderr.write(f"Worker: Loading model from {model_path}...\n")
     start_time = time.time()

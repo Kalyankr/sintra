@@ -91,17 +91,17 @@ class ModelDownloader:
             logger.info(f"Downloaded to {local_dir}")
             return local_dir
 
-        except RepositoryNotFoundError:
+        except RepositoryNotFoundError as e:
             raise DownloadError(
                 f"Model '{model_id}' not found on HuggingFace Hub. "
                 "Check the model ID at https://huggingface.co/models"
-            )
-        except GatedRepoError:
+            ) from e
+        except GatedRepoError as e:
             raise DownloadError(
                 f"Model '{model_id}' is gated. "
                 "Accept the license at https://huggingface.co/{model_id} "
                 "and provide a token with --hf-token"
-            )
+            ) from e
         except Exception as e:
             raise DownloadError(f"Failed to download '{model_id}': {e}") from e
 

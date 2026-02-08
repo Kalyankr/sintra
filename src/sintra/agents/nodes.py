@@ -83,7 +83,7 @@ def architect_node(state: SintraState) -> StateUpdate:
 
     system_prompt = f"""
     You are **Sintra**, an expert LLM Compression Architect.
-    Your mission is to design an optimal compression recipe for the model belonging to: {profile.name}.  
+    Your mission is to design an optimal compression recipe for the model belonging to: {profile.name}.
     You must balance speed, accuracy, and VRAM efficiency using quantization, pruning, and layer dropping.
 
     Your output MUST follow all rules below.
@@ -108,14 +108,14 @@ def architect_node(state: SintraState) -> StateUpdate:
     ====================================================
     COMPRESSION TECHNIQUES (Now Fully Implemented!)
     ====================================================
-    
+
     **1. QUANTIZATION (bits):**
     - Controls numerical precision of weights
     - Lower bits = smaller model, faster inference, lower accuracy
     - Supported: 2, 3, 4, 5, 6, 8 bits
     - Impact: ~12-15% size reduction per bit level
     - Recommended: Start with 4-bit (Q4_K_M), good balance
-    
+
     **2. STRUCTURED PRUNING (pruning_ratio):**
     - Zeros out smallest-magnitude weights in attention/MLP layers
     - Range: 0.0 (no pruning) to 0.5 (aggressive)
@@ -126,7 +126,7 @@ def architect_node(state: SintraState) -> StateUpdate:
         - 0.1-0.2: Noticeable speedup, slight quality loss
         - 0.2-0.3: Significant speedup, moderate quality loss
         - >0.3: Aggressive, may hurt accuracy significantly
-    
+
     **3. LAYER DROPPING (layers_to_drop):**
     - Removes entire transformer layers from the model
     - Most aggressive compression - removes ~1/N of model per layer
@@ -432,7 +432,7 @@ def critic_router(state: SintraState) -> str:
 # ============================================================================
 
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field  # noqa: E402
 
 
 class RoutingDecision(BaseModel):
@@ -641,7 +641,9 @@ def reporter_node(state: SintraState) -> dict:
         console.print(f"  Optimized Accuracy: {metrics_data['accuracy_score']:.2%}")
         console.print(f"  Accuracy Retention: [green]{retention:.1f}%[/green]")
         if accuracy_loss > 0:
-            console.print(f"  Accuracy Loss:      [yellow]{accuracy_loss:.1f}%[/yellow]")
+            console.print(
+                f"  Accuracy Loss:      [yellow]{accuracy_loss:.1f}%[/yellow]"
+            )
         console.print()
 
         output["baseline_comparison"] = {
@@ -656,9 +658,7 @@ def reporter_node(state: SintraState) -> dict:
 
         with open(output_file, "w") as f:
             json.dump(output, f, indent=4)
-        log_transition(
-            "Reporter", f"Recipe saved to {output_file}", "status.success"
-        )
+        log_transition("Reporter", f"Recipe saved to {output_file}", "status.success")
 
         # Handle Ollama export if requested
         ollama_model_name = os.environ.get("SINTRA_EXPORT_OLLAMA")
@@ -688,8 +688,8 @@ def _export_to_ollama(output_dir: Path, model_name: str) -> None:
 
     try:
         from sintra.compression.ollama_exporter import (
-            OllamaExportError,
             OllamaExporter,
+            OllamaExportError,
         )
 
         # Find the GGUF model in output or cache directory
@@ -711,7 +711,7 @@ def _export_to_ollama(output_dir: Path, model_name: str) -> None:
         # Use the most recently modified GGUF file
         gguf_path = max(gguf_files, key=lambda p: p.stat().st_mtime)
 
-        console.print(f"\n[bold cyan]🦙 Exporting to Ollama...[/bold cyan]")
+        console.print("\n[bold cyan]🦙 Exporting to Ollama...[/bold cyan]")
         console.print(f"  Model: {gguf_path.name}")
         console.print(f"  Name:  {model_name}")
 
