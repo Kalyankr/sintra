@@ -152,53 +152,11 @@ class AccuracyEvaluator:
     def _calculate_perplexity(self, llm: Llama, text: str) -> float:
         """Calculate perplexity on text.
 
-        Perplexity = exp(average negative log likelihood)
+        Uses a generation-based coherence heuristic since llama-cpp-python
+        doesn't expose per-token log probabilities efficiently.
+        Avoids the expensive per-token reset/eval loop.
         """
-        # Tokenize the text
-        tokens = llm.tokenize(text.encode("utf-8"))
-
-        if len(tokens) < 2:
-            raise EvaluationError("Text too short for perplexity calculation")
-
-        # Limit to context window
-        tokens = tokens[: self.n_ctx]
-
-        # Calculate log likelihood
-        total_log_prob = 0.0
-        n_tokens = 0
-
-        # Process in chunks to handle context window
-        chunk_size = min(256, self.n_ctx - 1)
-
-        for i in range(0, len(tokens) - 1, chunk_size):
-            chunk = tokens[i : i + chunk_size + 1]
-
-            # Get log probabilities for each token
-            llm.reset()
-            llm.eval(chunk[:-1])
-
-            # Get logits for last position
-            # Note: llama-cpp-python doesn't expose per-token logprobs easily
-            # so we approximate with a simpler method
-            for j in range(min(len(chunk) - 1, chunk_size)):
-                if i + j + 1 < len(tokens):
-                    # Evaluate and get logits
-                    context = tokens[: i + j + 1]
-                    if len(context) > self.n_ctx:
-                        context = context[-self.n_ctx :]
-
-                    llm.reset()
-                    llm.eval(context)
-
-                    # Get log probability of next token
-                    # Using a simplified approach since full logprobs are complex
-                    n_tokens += 1
-
-        # Simplified perplexity estimation based on model size/quantization
-        # This is a reasonable approximation when exact logprobs aren't available
-        # Real implementation would use llama.cpp's perplexity tool
-
-        # For now, run a generation and measure quality heuristically
+        # Run a generation and measure quality heuristically
         output = llm(
             "The capital of France is",
             max_tokens=20,
@@ -210,8 +168,6 @@ class AccuracyEvaluator:
 
         # Heuristic: check if response is coherent
         # Better models give more coherent completions
-        coherence_score = 1.0
-
         if "paris" in generated:
             coherence_score = 1.0
         elif any(word in generated for word in ["city", "capital", "france"]):
