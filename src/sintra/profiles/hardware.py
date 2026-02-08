@@ -6,6 +6,7 @@ HardwareProfile objects without requiring manual YAML files.
 
 import platform
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import psutil
@@ -13,8 +14,12 @@ import psutil
 from sintra.profiles.models import Constraints, HardwareProfile, Targets
 
 
+@lru_cache(maxsize=1)
 def detect_cuda() -> bool:
-    """Check if CUDA is available on the system."""
+    """Check if CUDA is available on the system.
+    
+    Result is cached since CUDA availability doesn't change during process lifetime.
+    """
     try:
         result = subprocess.run(
             ["nvidia-smi"],
@@ -27,8 +32,12 @@ def detect_cuda() -> bool:
         return False
 
 
+@lru_cache(maxsize=1)
 def get_gpu_vram_gb() -> float | None:
-    """Get GPU VRAM in GB if available."""
+    """Get GPU VRAM in GB if available.
+    
+    Result is cached since GPU VRAM doesn't change during process lifetime.
+    """
     try:
         result = subprocess.run(
             [
@@ -53,8 +62,9 @@ def get_gpu_vram_gb() -> float | None:
     return None
 
 
+@lru_cache(maxsize=1)
 def detect_cpu_arch() -> str:
-    """Detect CPU architecture."""
+    """Detect CPU architecture. Cached per process."""
     machine = platform.machine().lower()
     if machine in ("arm64", "aarch64"):
         return "arm64"
@@ -65,8 +75,9 @@ def detect_cpu_arch() -> str:
     return machine
 
 
+@lru_cache(maxsize=1)
 def detect_system_name() -> str:
-    """Generate a human-readable system name."""
+    """Generate a human-readable system name. Cached per process."""
     system = platform.system()
     machine = platform.machine()
 
