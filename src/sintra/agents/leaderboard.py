@@ -114,12 +114,14 @@ def _query_hf_leaderboard(
                                 benchmarks[key] = metric_value
 
                         if benchmarks:
-                            results.append({
-                                "model_id": model.id,
-                                "benchmarks": benchmarks,
-                                "downloads": model.downloads or 0,
-                                "likes": model.likes or 0,
-                            })
+                            results.append(
+                                {
+                                    "model_id": model.id,
+                                    "benchmarks": benchmarks,
+                                    "downloads": model.downloads or 0,
+                                    "likes": model.likes or 0,
+                                }
+                            )
                 except Exception:
                     continue
 
@@ -147,36 +149,68 @@ def _fallback_leaderboard(model_id: str) -> dict[str, Any]:
     # Reference benchmark data from known model evaluations
     known_benchmarks = {
         "llama-3": {
-            "mmlu": 0.66, "arc": 0.60, "hellaswag": 0.82,
-            "truthfulqa": 0.45, "winogrande": 0.78, "gsm8k": 0.45,
+            "mmlu": 0.66,
+            "arc": 0.60,
+            "hellaswag": 0.82,
+            "truthfulqa": 0.45,
+            "winogrande": 0.78,
+            "gsm8k": 0.45,
         },
         "llama-2": {
-            "mmlu": 0.46, "arc": 0.53, "hellaswag": 0.78,
-            "truthfulqa": 0.39, "winogrande": 0.74, "gsm8k": 0.14,
+            "mmlu": 0.46,
+            "arc": 0.53,
+            "hellaswag": 0.78,
+            "truthfulqa": 0.39,
+            "winogrande": 0.74,
+            "gsm8k": 0.14,
         },
         "mistral": {
-            "mmlu": 0.60, "arc": 0.62, "hellaswag": 0.83,
-            "truthfulqa": 0.42, "winogrande": 0.78, "gsm8k": 0.37,
+            "mmlu": 0.60,
+            "arc": 0.62,
+            "hellaswag": 0.83,
+            "truthfulqa": 0.42,
+            "winogrande": 0.78,
+            "gsm8k": 0.37,
         },
         "phi-2": {
-            "mmlu": 0.56, "arc": 0.61, "hellaswag": 0.75,
-            "truthfulqa": 0.44, "winogrande": 0.74, "gsm8k": 0.55,
+            "mmlu": 0.56,
+            "arc": 0.61,
+            "hellaswag": 0.75,
+            "truthfulqa": 0.44,
+            "winogrande": 0.74,
+            "gsm8k": 0.55,
         },
         "phi-3": {
-            "mmlu": 0.69, "arc": 0.65, "hellaswag": 0.80,
-            "truthfulqa": 0.48, "winogrande": 0.76, "gsm8k": 0.75,
+            "mmlu": 0.69,
+            "arc": 0.65,
+            "hellaswag": 0.80,
+            "truthfulqa": 0.48,
+            "winogrande": 0.76,
+            "gsm8k": 0.75,
         },
         "qwen": {
-            "mmlu": 0.58, "arc": 0.55, "hellaswag": 0.79,
-            "truthfulqa": 0.40, "winogrande": 0.73, "gsm8k": 0.52,
+            "mmlu": 0.58,
+            "arc": 0.55,
+            "hellaswag": 0.79,
+            "truthfulqa": 0.40,
+            "winogrande": 0.73,
+            "gsm8k": 0.52,
         },
         "gemma": {
-            "mmlu": 0.64, "arc": 0.61, "hellaswag": 0.81,
-            "truthfulqa": 0.44, "winogrande": 0.77, "gsm8k": 0.48,
+            "mmlu": 0.64,
+            "arc": 0.61,
+            "hellaswag": 0.81,
+            "truthfulqa": 0.44,
+            "winogrande": 0.77,
+            "gsm8k": 0.48,
         },
         "tinyllama": {
-            "mmlu": 0.25, "arc": 0.33, "hellaswag": 0.60,
-            "truthfulqa": 0.37, "winogrande": 0.59, "gsm8k": 0.02,
+            "mmlu": 0.25,
+            "arc": 0.33,
+            "hellaswag": 0.60,
+            "truthfulqa": 0.37,
+            "winogrande": 0.59,
+            "gsm8k": 0.02,
         },
     }
 

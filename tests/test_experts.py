@@ -60,17 +60,27 @@ def state_with_history(sample_profile):
     """Create a state with experiment history."""
     history = [
         {
-            "recipe": ModelRecipe(bits=4, pruning_ratio=0.0, layers_to_drop=[], method="GGUF"),
+            "recipe": ModelRecipe(
+                bits=4, pruning_ratio=0.0, layers_to_drop=[], method="GGUF"
+            ),
             "metrics": ExperimentResult(
-                actual_tps=25.0, actual_vram_usage=3.0, accuracy_score=0.8,
-                was_successful=True, error_log="",
+                actual_tps=25.0,
+                actual_vram_usage=3.0,
+                accuracy_score=0.8,
+                was_successful=True,
+                error_log="",
             ),
         },
         {
-            "recipe": ModelRecipe(bits=3, pruning_ratio=0.1, layers_to_drop=[], method="GGUF"),
+            "recipe": ModelRecipe(
+                bits=3, pruning_ratio=0.1, layers_to_drop=[], method="GGUF"
+            ),
             "metrics": ExperimentResult(
-                actual_tps=35.0, actual_vram_usage=2.5, accuracy_score=0.65,
-                was_successful=True, error_log="",
+                actual_tps=35.0,
+                actual_vram_usage=2.5,
+                accuracy_score=0.65,
+                was_successful=True,
+                error_log="",
             ),
         },
     ]
@@ -189,20 +199,28 @@ class TestPruningExpert:
 
     def test_no_pruning_when_accuracy_low(self, state_with_history):
         # Last entry has accuracy below target (0.65 < 0.7)
-        opinion = consult_pruning_expert(state_with_history, planned_bits=3, use_llm=False)
+        opinion = consult_pruning_expert(
+            state_with_history, planned_bits=3, use_llm=False
+        )
         assert opinion.suggested_pruning is not None
 
 
 class TestIntegrationExpert:
     def test_rule_based_basic(self, mock_state):
         quant = ExpertOpinion(
-            expert_name="Quant", domain="quantization",
-            recommendation="4-bit", suggested_bits=4, confidence=0.8,
+            expert_name="Quant",
+            domain="quantization",
+            recommendation="4-bit",
+            suggested_bits=4,
+            confidence=0.8,
         )
         prune = ExpertOpinion(
-            expert_name="Prune", domain="pruning",
-            recommendation="10%", suggested_pruning=0.1,
-            suggested_layers_to_drop=[], confidence=0.7,
+            expert_name="Prune",
+            domain="pruning",
+            recommendation="10%",
+            suggested_pruning=0.1,
+            suggested_layers_to_drop=[],
+            confidence=0.7,
         )
         opinion = consult_integration_expert(mock_state, quant, prune, use_llm=False)
         assert opinion.expert_name == "Integration Expert"
@@ -217,17 +235,25 @@ class TestIntegrationExpert:
             targets=Targets(min_tokens_per_second=10, min_accuracy_score=0.85),
         )
         quant = ExpertOpinion(
-            expert_name="Quant", domain="quantization",
-            recommendation="3-bit", suggested_bits=3, confidence=0.6,
+            expert_name="Quant",
+            domain="quantization",
+            recommendation="3-bit",
+            suggested_bits=3,
+            confidence=0.6,
         )
         prune = ExpertOpinion(
-            expert_name="Prune", domain="pruning",
-            recommendation="30%", suggested_pruning=0.3,
-            suggested_layers_to_drop=[10, 11, 12], confidence=0.5,
+            expert_name="Prune",
+            domain="pruning",
+            recommendation="30%",
+            suggested_pruning=0.3,
+            suggested_layers_to_drop=[10, 11, 12],
+            confidence=0.5,
         )
         opinion = consult_integration_expert(mock_state, quant, prune, use_llm=False)
         # Integration expert should moderate aggressive settings
-        total = (8 - (opinion.suggested_bits or 4)) * 0.1 + (opinion.suggested_pruning or 0)
+        total = (8 - (opinion.suggested_bits or 4)) * 0.1 + (
+            opinion.suggested_pruning or 0
+        )
         assert total <= 0.8  # Should not be extremely aggressive
 
 
@@ -260,15 +286,23 @@ class TestExpertCollaborationNode:
 class TestHelpers:
     def test_calculate_agreement_all_agree(self):
         opinions = [
-            ExpertOpinion(expert_name="A", domain="q", recommendation="x", suggested_bits=4),
-            ExpertOpinion(expert_name="B", domain="p", recommendation="x", suggested_bits=4),
+            ExpertOpinion(
+                expert_name="A", domain="q", recommendation="x", suggested_bits=4
+            ),
+            ExpertOpinion(
+                expert_name="B", domain="p", recommendation="x", suggested_bits=4
+            ),
         ]
         assert _calculate_agreement(opinions) == 1.0
 
     def test_calculate_agreement_disagree(self):
         opinions = [
-            ExpertOpinion(expert_name="A", domain="q", recommendation="x", suggested_bits=4),
-            ExpertOpinion(expert_name="B", domain="p", recommendation="x", suggested_bits=8),
+            ExpertOpinion(
+                expert_name="A", domain="q", recommendation="x", suggested_bits=4
+            ),
+            ExpertOpinion(
+                expert_name="B", domain="p", recommendation="x", suggested_bits=8
+            ),
         ]
         agreement = _calculate_agreement(opinions)
         assert agreement < 1.0
@@ -282,8 +316,11 @@ class TestHelpers:
     def test_build_consensus_summary(self):
         opinions = [
             ExpertOpinion(
-                expert_name="Quant", domain="quantization",
-                recommendation="4-bit", confidence=0.8, risk_assessment="low",
+                expert_name="Quant",
+                domain="quantization",
+                recommendation="4-bit",
+                confidence=0.8,
+                risk_assessment="low",
             ),
         ]
         summary = _build_consensus_summary(opinions)
@@ -295,7 +332,7 @@ class TestHelpers:
         assert data["bits"] == 4
 
     def test_parse_json_response_markdown(self):
-        content = "Here is my analysis:\n```json\n{\"bits\": 4}\n```\nDone."
+        content = 'Here is my analysis:\n```json\n{"bits": 4}\n```\nDone.'
         data = _parse_json_response(content)
         assert data["bits"] == 4
 

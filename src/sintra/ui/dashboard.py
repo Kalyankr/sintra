@@ -7,9 +7,7 @@ Provides an interactive web interface for:
 - Browsing hardware profiles
 """
 
-import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -38,18 +36,20 @@ def format_experiment_table(experiments: list[Any]) -> list[list[str]]:
     rows = []
     for exp in experiments:
         status = "✓" if exp.result.was_successful else "✗"
-        rows.append([
-            status,
-            str(exp.iteration),
-            str(exp.recipe.bits),
-            f"{exp.recipe.pruning_ratio:.0%}",
-            str(len(exp.recipe.layers_to_drop)),
-            f"{exp.result.actual_tps:.1f}",
-            f"{exp.result.accuracy_score:.2f}",
-            f"{exp.result.actual_vram_usage:.2f}",
-            exp.backend,
-            exp.created_at.strftime("%H:%M:%S"),
-        ])
+        rows.append(
+            [
+                status,
+                str(exp.iteration),
+                str(exp.recipe.bits),
+                f"{exp.recipe.pruning_ratio:.0%}",
+                str(len(exp.recipe.layers_to_drop)),
+                f"{exp.result.actual_tps:.1f}",
+                f"{exp.result.accuracy_score:.2f}",
+                f"{exp.result.actual_vram_usage:.2f}",
+                exp.backend,
+                exp.created_at.strftime("%H:%M:%S"),
+            ]
+        )
     return rows
 
 
@@ -136,15 +136,17 @@ def create_dashboard(host: str = "127.0.0.1", port: int = 7860) -> None:
                     "started_at, final_iteration FROM runs ORDER BY started_at DESC LIMIT 50"
                 )
                 for row in cursor.fetchall():
-                    rows.append([
-                        str(row["run_id"])[:12],
-                        str(row["model_id"]),
-                        str(row["hardware_name"]),
-                        str(row["backend"]),
-                        str(row["status"]),
-                        str(row["started_at"]),
-                        str(row["final_iteration"]),
-                    ])
+                    rows.append(
+                        [
+                            str(row["run_id"])[:12],
+                            str(row["model_id"]),
+                            str(row["hardware_name"]),
+                            str(row["backend"]),
+                            str(row["status"]),
+                            str(row["started_at"]),
+                            str(row["final_iteration"]),
+                        ]
+                    )
             return rows
         except Exception as e:
             return [[f"Error: {e}", "", "", "", "", "", ""]]
@@ -209,8 +211,16 @@ def create_dashboard(host: str = "127.0.0.1", port: int = 7860) -> None:
     # ── Build the UI ──
 
     experiment_headers = [
-        "Status", "Iter", "Bits", "Pruning", "Layers Dropped",
-        "TPS", "Accuracy", "VRAM (GB)", "Backend", "Time",
+        "Status",
+        "Iter",
+        "Bits",
+        "Pruning",
+        "Layers Dropped",
+        "TPS",
+        "Accuracy",
+        "VRAM (GB)",
+        "Backend",
+        "Time",
     ]
 
     with gr.Blocks(
@@ -245,8 +255,13 @@ def create_dashboard(host: str = "127.0.0.1", port: int = 7860) -> None:
         with gr.Tab("🏃 Runs"):
             runs_table = gr.Dataframe(
                 headers=[
-                    "Run ID", "Model", "Hardware", "Backend",
-                    "Status", "Started", "Iterations",
+                    "Run ID",
+                    "Model",
+                    "Hardware",
+                    "Backend",
+                    "Status",
+                    "Started",
+                    "Iterations",
                 ],
                 label="Optimization Runs",
             )
@@ -291,7 +306,7 @@ def create_dashboard(host: str = "127.0.0.1", port: int = 7860) -> None:
                 outputs=[profile_yaml],
             )
 
-        with gr.Tab("ℹ️ About"):
+        with gr.Tab("About"):
             gr.Markdown("""
 ## Sintra: Autonomous Edge AI Distiller
 

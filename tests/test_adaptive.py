@@ -1,7 +1,5 @@
 """Tests for the adaptive learning module."""
 
-import pytest
-
 from sintra.agents.adaptive import (
     AdaptiveLearner,
     enhance_estimate_with_history,

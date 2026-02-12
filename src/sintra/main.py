@@ -11,6 +11,7 @@ from langgraph.graph import END, StateGraph
 # Load environment variables from .env file (if exists)
 load_dotenv()
 
+from sintra.agents.experts import expert_collaboration_node  # noqa: E402
 from sintra.agents.factory import MissingAPIKeyError  # noqa: E402
 from sintra.agents.nodes import (  # noqa: E402
     LLMConnectionError,
@@ -21,7 +22,6 @@ from sintra.agents.nodes import (  # noqa: E402
     critic_router_llm,
     reporter_node,
 )
-from sintra.agents.experts import expert_collaboration_node  # noqa: E402
 from sintra.agents.planner import planner_node  # noqa: E402
 from sintra.agents.react_architect import react_architect_node  # noqa: E402
 from sintra.agents.reflector import reflector_node  # noqa: E402

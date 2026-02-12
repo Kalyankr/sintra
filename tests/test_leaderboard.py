@@ -1,7 +1,5 @@
 """Tests for the Open LLM Leaderboard integration module."""
 
-import pytest
-
 from sintra.agents.leaderboard import (
     BENCHMARK_NAMES,
     _fallback_leaderboard,
@@ -66,8 +64,14 @@ class TestFallbackLeaderboard:
 
     def test_all_families_have_six_benchmarks(self):
         families = [
-            "llama-3", "llama-2", "mistral",
-            "phi-2", "phi-3", "qwen", "gemma", "tinyllama",
+            "llama-3",
+            "llama-2",
+            "mistral",
+            "phi-2",
+            "phi-3",
+            "qwen",
+            "gemma",
+            "tinyllama",
         ]
         for family in families:
             result = _fallback_leaderboard(family)

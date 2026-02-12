@@ -1,17 +1,18 @@
 """Tests for the Gradio web UI dashboard module."""
 
-import pytest
 from datetime import datetime
 from unittest.mock import MagicMock
 
+import pytest
+
+from sintra.profiles.models import (
+    ExperimentResult,
+    ModelRecipe,
+)
 from sintra.ui.dashboard import (
     check_gradio_available,
     format_experiment_table,
     format_run_info,
-)
-from sintra.profiles.models import (
-    ExperimentResult,
-    ModelRecipe,
 )
 
 

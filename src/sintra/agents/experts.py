@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 from sintra.agents.factory import get_critic_llm
 from sintra.agents.state import SintraState
 from sintra.agents.tools import (
-    estimate_compression_impact,
     get_model_architecture,
 )
 from sintra.persistence import format_history_from_db
@@ -41,9 +40,7 @@ class ExpertOpinion(BaseModel):
         description="Expert domain: 'quantization', 'pruning', 'integration'"
     )
     recommendation: str = Field(description="The expert's recommendation")
-    suggested_bits: int | None = Field(
-        default=None, description="Suggested bit width"
-    )
+    suggested_bits: int | None = Field(default=None, description="Suggested bit width")
     suggested_pruning: float | None = Field(
         default=None, description="Suggested pruning ratio"
     )
@@ -66,9 +63,7 @@ class ExpertConsensus(BaseModel):
         default_factory=list, description="Individual expert opinions"
     )
     consensus_bits: int = Field(default=4, description="Agreed bit width")
-    consensus_pruning: float = Field(
-        default=0.0, description="Agreed pruning ratio"
-    )
+    consensus_pruning: float = Field(default=0.0, description="Agreed pruning ratio")
     consensus_layers_to_drop: list[int] = Field(
         default_factory=list, description="Agreed layers to drop"
     )
@@ -76,9 +71,7 @@ class ExpertConsensus(BaseModel):
         default=0.5, description="How much experts agree (0-1)"
     )
     summary: str = Field(default="", description="Summary of expert discussion")
-    strategy_notes: str = Field(
-        default="", description="Additional strategic guidance"
-    )
+    strategy_notes: str = Field(default="", description="Additional strategic guidance")
 
 
 # ============================================================================
@@ -238,7 +231,6 @@ def consult_quantization_expert(
         ExpertOpinion with quantization recommendation
     """
     profile = state["profile"]
-    model_id = state["target_model_id"]
     history = state.get("history", [])
 
     if use_llm and not state.get("use_debug"):
@@ -268,7 +260,9 @@ def consult_quantization_expert(
         # Use best successful bit width
         bits = min(successful_bits)  # Most compressed that still works
         confidence = 0.8
-        reasoning = f"Based on {len(successful_bits)} successful runs, {bits}-bit is reliable"
+        reasoning = (
+            f"Based on {len(successful_bits)} successful runs, {bits}-bit is reliable"
+        )
     elif vram_gb < 4:
         bits = 4
         confidence = 0.7
@@ -325,10 +319,12 @@ def _llm_quantization_expert(state: SintraState) -> ExpertOpinion:
     )
 
     llm = get_critic_llm(state["llm_config"])
-    response = llm.invoke([
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": "Provide your quantization recommendation."},
-    ])
+    response = llm.invoke(
+        [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Provide your quantization recommendation."},
+        ]
+    )
 
     data = _parse_json_response(response.content)
 
@@ -377,12 +373,8 @@ def consult_pruning_expert(
     for entry in history[-3:]:
         metrics = entry["metrics"]
         if metrics.was_successful:
-            speed_gap = max(
-                speed_gap, target_tps - metrics.actual_tps
-            )
-            accuracy_gap = max(
-                accuracy_gap, target_accuracy - metrics.accuracy_score
-            )
+            speed_gap = max(speed_gap, target_tps - metrics.actual_tps)
+            accuracy_gap = max(accuracy_gap, target_accuracy - metrics.accuracy_score)
 
     # Determine pruning recommendation
     pruning_ratio = 0.0
@@ -417,7 +409,9 @@ def consult_pruning_expert(
         reasoning += f" + dropping {len(layers_to_drop)} middle layers for extra speed"
         confidence *= 0.85
 
-    risk = "low" if pruning_ratio <= 0.1 else "medium" if pruning_ratio <= 0.25 else "high"
+    risk = (
+        "low" if pruning_ratio <= 0.1 else "medium" if pruning_ratio <= 0.25 else "high"
+    )
 
     return ExpertOpinion(
         expert_name="Pruning Expert",
@@ -452,10 +446,12 @@ def _llm_pruning_expert(state: SintraState, planned_bits: int) -> ExpertOpinion:
     )
 
     llm = get_critic_llm(state["llm_config"])
-    response = llm.invoke([
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": "Provide your pruning recommendation."},
-    ])
+    response = llm.invoke(
+        [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Provide your pruning recommendation."},
+        ]
+    )
 
     data = _parse_json_response(response.content)
 
@@ -508,7 +504,7 @@ def consult_integration_expert(
         if pruning > 0.1:
             pruning = max(0.0, pruning - 0.1)
         elif len(layers) > 0:
-            layers = layers[:max(0, len(layers) - 1)]
+            layers = layers[: max(0, len(layers) - 1)]
         else:
             bits = min(bits + 1, 8)
         reasoning = "Reduced compression aggressiveness to protect accuracy"
@@ -563,10 +559,12 @@ def _llm_integration_expert(
     )
 
     llm = get_critic_llm(state["llm_config"])
-    response = llm.invoke([
-        {"role": "system", "content": prompt},
-        {"role": "user", "content": "Provide your integration assessment."},
-    ])
+    response = llm.invoke(
+        [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": "Provide your integration assessment."},
+        ]
+    )
 
     data = _parse_json_response(response.content)
 

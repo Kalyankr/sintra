@@ -19,6 +19,10 @@ from sintra.agents.factory import (
     get_critic_llm,
     get_tool_enabled_llm,
 )
+from sintra.agents.leaderboard import (
+    query_community_benchmarks,
+    query_leaderboard,
+)
 from sintra.agents.nodes import (
     LLMConnectionError,
     RoutingDecision,
@@ -28,10 +32,6 @@ from sintra.agents.nodes import (
     critic_router,
     critic_router_llm,
     reporter_node,
-)
-from sintra.agents.leaderboard import (
-    query_community_benchmarks,
-    query_leaderboard,
 )
 from sintra.agents.planner import (
     OptimizationPlan,
@@ -56,23 +56,16 @@ from sintra.agents.tools import (
 )
 
 __all__ = [
-    # Adaptive Learning
     "AdaptiveLearner",
-    "enhance_estimate_with_history",
-    "get_adaptive_learner",
-    # Errors
-    "LLMConnectionError",
-    "MissingAPIKeyError",
-    # Models
     "ExpertConsensus",
     "ExpertOpinion",
+    "LLMConnectionError",
+    "MissingAPIKeyError",
     "OptimizationPlan",
     "OptimizationStep",
     "Reflection",
     "RoutingDecision",
-    # State
     "SintraState",
-    # Nodes
     "architect_node",
     "benchmarker_node",
     "consult_integration_expert",
@@ -81,11 +74,11 @@ __all__ = [
     "critic_node",
     "critic_router",
     "critic_router_llm",
+    "enhance_estimate_with_history",
     "estimate_compression_impact",
     "expert_collaboration_node",
-    # LLM Factories
+    "get_adaptive_learner",
     "get_architect_llm",
-    # Tools
     "get_architect_tools",
     "get_critic_llm",
     "get_model_architecture",

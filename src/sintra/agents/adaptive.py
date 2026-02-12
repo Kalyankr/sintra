@@ -68,7 +68,8 @@ class AdaptiveLearner:
 
             # Filter for matching bit width
             matching = [
-                e for e in experiments
+                e
+                for e in experiments
                 if e.recipe.bits == bits and e.result.was_successful
             ]
 
@@ -123,7 +124,8 @@ class AdaptiveLearner:
 
             # Filter for similar configurations
             matching = [
-                e for e in experiments
+                e
+                for e in experiments
                 if e.recipe.bits == bits
                 and abs(e.recipe.pruning_ratio - pruning_ratio) < 0.1
                 and e.result.was_successful
@@ -187,7 +189,8 @@ class AdaptiveLearner:
             )
 
             matching = [
-                e for e in experiments
+                e
+                for e in experiments
                 if e.recipe.bits == bits
                 and e.result.was_successful
                 and e.result.actual_vram_usage > 0
@@ -357,7 +360,9 @@ def enhance_estimate_with_history(
 
     # Calibrate TPS
     hist_tps = learner.get_tps_estimate(
-        model_family, bits, pruning_ratio,
+        model_family,
+        bits,
+        pruning_ratio,
         sum(base_estimate.get("estimated_tps_range", (15, 25))) / 2,
     )
     base_tps = base_estimate.get("estimated_tps_range", (15, 25))
