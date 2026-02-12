@@ -47,6 +47,10 @@ all = [
     "langchain-google-genai",
     "langchain-openai",
 ]
+# Web UI
+ui = [
+    "gradio>=4.0.0",
+]
 
 [project.scripts]
 sintra = "sintra:main"
@@ -97,6 +101,8 @@ module = [
     "llama_cpp",
     "psutil",
     "rich.*",
+    "gradio",
+    "gradio.*",
 ]
 ignore_missing_imports = true
 
