@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 import json
 import logging
 import os
 import sys
 import uuid
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from langgraph.graph import END, StateGraph
@@ -51,7 +54,7 @@ def build_sintra_workflow(
     use_react: bool = False,
     use_reflection: bool = False,
     use_llm_routing: bool = False,
-):
+) -> Any:
     workflow = StateGraph(SintraState)
 
     # Optional: Add planner for strategic optimization
@@ -144,7 +147,7 @@ def _setup_logging(verbosity: int) -> None:
         logging.getLogger(logger_name).setLevel(level)
 
 
-def main():
+def main() -> None:
     # Get CLI arguments
     args = parse_args()
 
@@ -267,7 +270,7 @@ def main():
         )
 
         # Initialize State (fresh run)
-        initial_state: SintraState = {
+        initial_state = {
             "profile": profile,
             "llm_config": LLMConfig(
                 provider=LLMProvider(args.provider),
@@ -341,6 +344,7 @@ def main():
 
     # Streaming the graph for real-time console updates
     final_state = None
+    assert initial_state is not None
     current_iteration = initial_state.get("iteration", 0)
 
     try:
@@ -450,7 +454,7 @@ def main():
         sys.exit(1)
 
 
-def _run_dry_mode(args, profile, output_dir: Path) -> None:
+def _run_dry_mode(args: Any, profile: Any, output_dir: Path) -> None:
     """Execute dry-run mode: show what would happen without running compression."""
 
     console.print("\n[bold yellow]🔍 DRY RUN MODE[/bold yellow]")
@@ -558,7 +562,7 @@ def _list_checkpoints() -> None:
 
 def _load_resume_checkpoint(
     resume_arg: str, model_id: str | None = None
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Load checkpoint for resume.
 
     Args:
@@ -574,7 +578,7 @@ def _load_resume_checkpoint(
         return load_checkpoint(resume_arg)
 
 
-def _check_gguf_dependencies():
+def _check_gguf_dependencies() -> None:
     """Check if llama.cpp is available for GGUF backend."""
     from sintra.compression.quantizer import (
         LLAMA_CPP_INSTALL_INSTRUCTIONS,
@@ -625,7 +629,7 @@ def _check_backend_dependencies(backend: str) -> None:
         _check_onnx_dependencies()
 
 
-def _check_bnb_dependencies():
+def _check_bnb_dependencies() -> None:
     """Check if BitsAndBytes is available."""
     try:
         import accelerate  # noqa: F401
@@ -666,7 +670,7 @@ def _check_bnb_dependencies():
         sys.exit(1)
 
 
-def _check_onnx_dependencies():
+def _check_onnx_dependencies() -> None:
     """Check if ONNX/Optimum is available."""
     try:
         import onnx  # noqa: F401

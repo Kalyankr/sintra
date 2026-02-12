@@ -269,7 +269,7 @@ def _search_huggingface_models(
     from huggingface_hub import HfApi
 
     api = HfApi()
-    results = []
+    results: list[dict[str, Any]] = []
 
     # Extract model name for search
     model_name = base_model.split("/")[-1]
@@ -682,8 +682,9 @@ def _lookup_from_history(model_family: str, bits: int) -> dict[str, Any] | None:
         """
 
         family_pattern = f"%{model_family}%"
-        cursor = db.execute(query, (family_pattern, bits))
-        rows = cursor.fetchall()
+        with db._get_connection() as conn:
+            cursor = conn.execute(query, (family_pattern, bits))
+            rows = cursor.fetchall()
 
         if not rows:
             return None
@@ -858,7 +859,7 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> dict[str, Any]
 # ============================================================================
 
 
-def get_architect_tools() -> list:
+def get_architect_tools() -> list[Any]:
     """Get all tools available to the architect agent."""
     return [
         get_model_architecture,  # ALWAYS call first to know layer count

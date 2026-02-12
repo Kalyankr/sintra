@@ -12,7 +12,7 @@ from sintra.agents.tools import (
 class TestSearchSimilarModels:
     """Tests for the search_similar_models tool."""
 
-    def test_returns_results_for_llama(self):
+    def test_returns_results_for_llama(self) -> None:
         """Should return results for Llama models."""
         results = search_similar_models.invoke(
             {
@@ -27,7 +27,7 @@ class TestSearchSimilarModels:
         assert all("model_id" in r for r in results)
         assert any("llama" in r["model_id"].lower() for r in results)
 
-    def test_returns_results_for_mistral(self):
+    def test_returns_results_for_mistral(self) -> None:
         """Should return results for Mistral models."""
         results = search_similar_models.invoke(
             {
@@ -39,7 +39,7 @@ class TestSearchSimilarModels:
         assert isinstance(results, list)
         assert any("mistral" in r["model_id"].lower() for r in results)
 
-    def test_returns_generic_for_unknown_model(self):
+    def test_returns_generic_for_unknown_model(self) -> None:
         """Should return generic results for unknown models."""
         results = search_similar_models.invoke(
             {
@@ -55,7 +55,7 @@ class TestSearchSimilarModels:
 class TestEstimateCompressionImpact:
     """Tests for the estimate_compression_impact tool."""
 
-    def test_basic_estimation(self):
+    def test_basic_estimation(self) -> None:
         """Should return valid estimation."""
         result = estimate_compression_impact.invoke(
             {
@@ -76,7 +76,7 @@ class TestEstimateCompressionImpact:
         # Size should be smaller than FP16
         assert result["estimated_size_gb"] < 14.0  # 7B * 2 bytes
 
-    def test_aggressive_compression_has_lower_confidence(self):
+    def test_aggressive_compression_has_lower_confidence(self) -> None:
         """Aggressive settings should have lower confidence."""
         conservative = estimate_compression_impact.invoke(
             {
@@ -98,7 +98,7 @@ class TestEstimateCompressionImpact:
 
         assert aggressive["confidence"] < conservative["confidence"]
 
-    def test_layer_dropping_reduces_size(self):
+    def test_layer_dropping_reduces_size(self) -> None:
         """Dropping layers should reduce estimated size."""
         without_drop = estimate_compression_impact.invoke(
             {
@@ -125,7 +125,7 @@ class TestEstimateCompressionImpact:
 class TestQueryHardwareCapabilities:
     """Tests for the query_hardware_capabilities tool."""
 
-    def test_low_memory_device(self):
+    def test_low_memory_device(self) -> None:
         """Should recommend aggressive quantization for low memory."""
         result = query_hardware_capabilities.invoke(
             {
@@ -141,7 +141,7 @@ class TestQueryHardwareCapabilities:
         assert 3 in result["supported_bits"]
         assert result["max_model_params_billions"] <= 2.0
 
-    def test_high_memory_device(self):
+    def test_high_memory_device(self) -> None:
         """Should support more options for high memory."""
         result = query_hardware_capabilities.invoke(
             {
@@ -155,7 +155,7 @@ class TestQueryHardwareCapabilities:
         assert 8 in result["supported_bits"]
         assert result["max_model_params_billions"] > 5.0
 
-    def test_cuda_device(self):
+    def test_cuda_device(self) -> None:
         """CUDA devices should support all quantization."""
         result = query_hardware_capabilities.invoke(
             {
@@ -174,7 +174,7 @@ class TestQueryHardwareCapabilities:
 class TestLookupQuantizationBenchmarks:
     """Tests for the lookup_quantization_benchmarks tool."""
 
-    def test_known_model_family(self):
+    def test_known_model_family(self) -> None:
         """Should return data for known model families."""
         result = lookup_quantization_benchmarks.invoke(
             {
@@ -187,7 +187,7 @@ class TestLookupQuantizationBenchmarks:
         assert "benchmark_results" in result
         assert result["model_family"] == "llama"
 
-    def test_unknown_model_family(self):
+    def test_unknown_model_family(self) -> None:
         """Should return generic estimate for unknown families."""
         result = lookup_quantization_benchmarks.invoke(
             {
@@ -199,7 +199,7 @@ class TestLookupQuantizationBenchmarks:
         assert result["found"] is False
         assert "generic_estimate" in result or "message" in result
 
-    def test_different_bit_widths(self):
+    def test_different_bit_widths(self) -> None:
         """Lower bits should have higher TPS but more accuracy loss."""
         result_4bit = lookup_quantization_benchmarks.invoke(
             {
@@ -229,7 +229,7 @@ class TestLookupQuantizationBenchmarks:
 class TestGetArchitectTools:
     """Tests for the get_architect_tools function."""
 
-    def test_returns_all_tools(self):
+    def test_returns_all_tools(self) -> None:
         """Should return all architect tools."""
         tools = get_architect_tools()
 
@@ -242,7 +242,7 @@ class TestGetArchitectTools:
         assert "query_hardware_capabilities" in tool_names
         assert "lookup_quantization_benchmarks" in tool_names
 
-    def test_tools_are_callable(self):
+    def test_tools_are_callable(self) -> None:
         """All tools should be callable."""
         tools = get_architect_tools()
 
