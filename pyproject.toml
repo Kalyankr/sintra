@@ -47,6 +47,10 @@ all = [
     "langchain-google-genai",
     "langchain-openai",
 ]
+# Web UI
+ui = [
+    "gradio>=4.0.0",
+]
 
 [project.scripts]
 sintra = "sintra:main"
@@ -105,6 +109,8 @@ module = [
     "torch.*",
     "transformers",
     "transformers.*",
+    "gradio",
+    "gradio.*",
 ]
 ignore_missing_imports = true
 

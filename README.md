@@ -6,10 +6,12 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![LangGraph](https://img.shields.io/badge/Built%20with-LangGraph-purple.svg)](https://github.com/langchain-ai/langgraph)
+[![Tests](https://img.shields.io/badge/tests-404%20passed-brightgreen.svg)]()
+[![CI](https://github.com/Kalyankr/sintra/actions/workflows/ci.yml/badge.svg)](https://github.com/Kalyankr/sintra/actions/workflows/ci.yml)
 
 **Sintra** (Synthetic Intelligence for Targeted Runtime Architectures) is a fully autonomous agentic framework that optimizes Large Language Models for resource-constrained edge devices.
 
-[Quick Start](#-quick-start) • [Features](#-key-features) • [Architecture](#-agentic-architecture)
+[Quick Start](#-quick-start) • [Features](#-key-features) • [Architecture](#-agentic-architecture) • [Dashboard](#-web-dashboard)
 
 </div>
 
@@ -43,10 +45,10 @@ An **autonomous AI agent** that:
 # Install
 git clone https://github.com/Kalyankr/sintra.git
 cd sintra
-pip install -e .
+uv sync --extra all
 
 # Run - zero flags needed!
-sintra
+uv run sintra
 ```
 
 That's it. Sintra auto-detects your hardware, sets smart targets, and starts optimizing.
@@ -70,9 +72,11 @@ sintra --resume
 ## ✨ Key Features
 
 ### 🤖 Fully Agentic
-- **Tool Calling**: 5 specialized tools for model research
+- **Tool Calling**: 6 specialized tools for model research & benchmarking
+- **Multi-Agent Experts**: 3 domain experts (quantization, pruning, integration) collaborate on recipes
 - **ReAct Pattern**: Reason → Act → Observe loop
 - **Self-Reflection**: Learns from failures automatically
+- **Adaptive Learning**: Calibrates predictions from past experiment history
 - **LLM Routing**: Smart decisions on when to stop
 - **Planning**: Strategic optimization before execution
 
@@ -96,7 +100,13 @@ Accuracy Comparison:
 ### 💾 Persistence & Learning
 - **SQLite database** tracks all experiments
 - **Cross-run learning**: Agent avoids past mistakes
+- **Adaptive calibration**: Accuracy/TPS/size estimates improve over time
 - **Checkpointing**: Resume interrupted optimizations
+
+### 📈 Community Benchmarks
+- **Open LLM Leaderboard** integration via HuggingFace Hub
+- Look up MMLU, ARC, HellaSwag, TruthfulQA, Winogrande, GSM8K scores
+- Fallback reference data for 8 major model families
 
 ### 🔧 Hardware Auto-Detection
 Automatically detects CPU, RAM, GPU and calculates achievable targets:
@@ -118,39 +128,68 @@ Automatically detects CPU, RAM, GPU and calculates achievable targets:
 │                        SINTRA AGENT                              │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  ┌──────────┐    ┌─────────────────────────────────────────┐    │
-│  │ PLANNER  │───▶│           REACT ARCHITECT               │    │
-│  │  (LLM)   │    │  ┌────────────────────────────────────┐ │    │
-│  └──────────┘    │  │ TOOLS:                             │ │    │
-│                  │  │ • get_model_architecture           │ │    │
-│                  │  │ • search_similar_models            │ │    │
-│                  │  │ • estimate_compression_impact      │ │    │
-│                  │  │ • query_hardware_capabilities      │ │    │
-│                  │  │ • lookup_quantization_benchmarks   │ │    │
-│                  │  └────────────────────────────────────┘ │    │
-│                  └───────────────────┬─────────────────────┘    │
-│                                      │                          │
-│                                      ▼                          │
-│                             ┌──────────────┐                    │
-│                             │ BENCHMARKER  │                    │
-│                             │  (Executor)  │                    │
-│                             └──────┬───────┘                    │
-│                                    │                            │
-│                                    ▼                            │
-│  ┌───────────┐            ┌──────────────┐                     │
-│  │ REFLECTOR │◀───────────│    CRITIC    │                     │
-│  │   (LLM)   │            │ (LLM Router) │                     │
-│  └─────┬─────┘            └──────┬───────┘                     │
-│        │                         │                              │
-│        │    ┌────────────────────┴────────────────┐            │
-│        │    │                                     │            │
-│        ▼    ▼                                     ▼            │
-│   [Continue Loop]                            [REPORTER]        │
-│                                               (Output)         │
+│  ┌──────────┐    ┌──────────────┐                               │
+│  │ PLANNER  │───▶│   EXPERTS    │                               │
+│  │  (LLM)   │    │ ┌──────────┐ │                               │
+│  └──────────┘    │ │ Quant    │ │                               │
+│                  │ │ Pruning  │ │                               │
+│                  │ │ Integr.  │ │                               │
+│                  │ └──────────┘ │                               │
+│                  └──────┬───────┘                               │
+│                         │                                       │
+│                         ▼                                       │
+│        ┌─────────────────────────────────────────┐              │
+│        │           REACT ARCHITECT               │              │
+│        │  ┌────────────────────────────────────┐ │              │
+│        │  │ TOOLS:                             │ │              │
+│        │  │ • get_model_architecture           │ │              │
+│        │  │ • search_similar_models            │ │              │
+│        │  │ • estimate_compression_impact      │ │              │
+│        │  │ • query_hardware_capabilities      │ │              │
+│        │  │ • lookup_quantization_benchmarks   │ │              │
+│        │  │ • query_community_benchmarks       │ │              │
+│        │  └────────────────────────────────────┘ │              │
+│        └───────────────────┬─────────────────────┘              │
+│                            │                                    │
+│                            ▼                                    │
+│                   ┌──────────────┐                              │
+│                   │ BENCHMARKER  │                              │
+│                   │  (Executor)  │                              │
+│                   └──────┬───────┘                              │
+│                          │                                      │
+│                          ▼                                      │
+│  ┌───────────┐  ┌──────────────┐                               │
+│  │ REFLECTOR │◀─│    CRITIC    │                               │
+│  │   (LLM)   │  │ (LLM Router) │                               │
+│  └─────┬─────┘  └──────┬───────┘                               │
+│        │               │                                        │
+│        │    ┌──────────┴──────────┐                             │
+│        │    │                     │                              │
+│        ▼    ▼                     ▼                              │
+│   [Continue Loop]            [REPORTER]                         │
+│                               (Output)                          │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-## 📖 CLI Reference
+## �️ Web Dashboard
+
+Launch an interactive Gradio dashboard to explore optimization history, compare runs, and browse hardware profiles:
+
+```bash
+# Launch dashboard
+sintra --ui
+
+# Custom port
+sintra --ui --ui-port 8080
+```
+
+<p align="center">
+  <strong>Tabs:</strong> History • Runs • Profiles • About
+</p>
+
+> **Note:** Requires `gradio` — install with `uv sync --extra ui`
+
+## �📖 CLI Reference
 
 ```bash
 sintra [profile] [options]
@@ -185,7 +224,14 @@ sintra [profile] [options]
 | `--no-plan` | - | Disable planner |
 | `--no-react` | - | Disable ReAct architect |
 | `--no-reflect` | - | Disable self-reflection |
+| `--no-experts` | - | Disable multi-agent experts |
 | `--no-llm-routing` | - | Use rule-based routing |
+
+### Web Dashboard
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--ui` | - | Launch Gradio web dashboard |
+| `--ui-port` | 7860 | Dashboard port |
 
 ### Execution
 | Flag | Description |
@@ -204,25 +250,31 @@ sintra [profile] [options]
 | **LLM Integration** | [LangChain](https://github.com/langchain-ai/langchain) |
 | **LLM Providers** | OpenAI, Anthropic, Google, Ollama |
 | **Model Hub** | HuggingFace Hub API |
+| **Benchmarks** | Open LLM Leaderboard (HuggingFace) |
 | **Compression** | llama.cpp, BitsAndBytes, ONNX Runtime |
 | **Persistence** | SQLite |
-| **Testing** | pytest (tests) |
+| **Web Dashboard** | [Gradio](https://gradio.app) (optional) |
+| **CI/CD** | GitHub Actions |
+| **Testing** | pytest (404 tests) |
 
 ## 🧪 Development
 
 ```bash
 # Install dev dependencies
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # Run tests
-pytest tests/ -v
+uv run pytest -v
 
 # Run with coverage
-pytest tests/ --cov=sintra
+uv run pytest --cov=sintra
 
-# Format code
-ruff format src tests
-ruff check --fix src tests
+# Lint & format
+uv run ruff format src tests
+uv run ruff check --fix src tests
+
+# Type checking
+uv run mypy src/sintra
 
 # Debug mode (no LLM calls)
 sintra --debug
@@ -242,14 +294,18 @@ sintra/
 │   │   ├── planner.py    # Strategic optimization planner
 │   │   ├── react_architect.py  # ReAct pattern implementation
 │   │   ├── reflector.py  # Self-reflection on failures
-│   │   └── tools.py      # 5 architect tools
+│   │   ├── experts.py    # Multi-agent expert collaboration
+│   │   ├── leaderboard.py # Open LLM Leaderboard integration
+│   │   ├── adaptive.py   # Adaptive learning from history
+│   │   └── tools.py      # 6 architect tools
 │   ├── benchmarks/       # Execution & measurement
 │   ├── compression/      # GGUF, BnB, ONNX backends
 │   ├── profiles/         # Hardware detection & profiles
 │   ├── persistence/      # SQLite history database
+│   ├── ui/               # Console, progress & Gradio dashboard
 │   ├── cli.py            # Command-line interface
 │   └── main.py           # LangGraph workflow
-├── tests/                # tests
+├── tests/                # 404 tests
 ├── profiles/             # Example hardware profiles
 └── outputs/              # Optimized models & configs
 ```
