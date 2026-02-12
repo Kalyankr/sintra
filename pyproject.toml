@@ -93,14 +93,22 @@ mypy_path = "src"
 
 [[tool.mypy.overrides]]
 module = [
+    "accelerate",
+    "bitsandbytes",
     "langchain_anthropic",
     "langchain_google_genai",
     "langchain_openai",
     "langchain_ollama",
     "langgraph.*",
     "llama_cpp",
+    "onnx",
+    "optimum.*",
     "psutil",
     "rich.*",
+    "torch",
+    "torch.*",
+    "transformers",
+    "transformers.*",
     "gradio",
     "gradio.*",
 ]

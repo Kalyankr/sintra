@@ -9,11 +9,14 @@ The worker supports multiple quantization backends:
 - ONNX (Optimum): Multi-platform ONNX Runtime
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys
 import time
 from pathlib import Path
+from typing import Any, cast
 
 import psutil
 from llama_cpp import Llama
@@ -247,14 +250,14 @@ def run_transformers_benchmark(
                 model_path,
                 device_map="auto",
             )
-            tokenizer = AutoTokenizer.from_pretrained(model_path)
+            tokenizer = AutoTokenizer.from_pretrained(model_path)  # type: ignore[no-untyped-call]
 
         elif backend == "onnx":
             from optimum.onnxruntime import ORTModelForCausalLM
             from transformers import AutoTokenizer
 
             model = ORTModelForCausalLM.from_pretrained(model_path)
-            tokenizer = AutoTokenizer.from_pretrained(model_path)
+            tokenizer = AutoTokenizer.from_pretrained(model_path)  # type: ignore[no-untyped-call]
         else:
             raise ValueError(f"Unknown backend: {backend}")
 
@@ -287,7 +290,8 @@ def run_transformers_benchmark(
         gen_end = time.time()
 
         # Calculate metrics
-        tokens_generated = outputs.shape[1] - inputs["input_ids"].shape[1]
+        outputs_tensor = cast(Any, outputs)
+        tokens_generated: int = outputs_tensor.shape[1] - inputs["input_ids"].shape[1]
         duration = gen_end - gen_start
         actual_tps = tokens_generated / duration if duration > 0 else 0
 
@@ -409,11 +413,11 @@ def run_benchmark(
     sys.stderr.write("Worker: Running TPS benchmark...\n")
     gen_start = time.time()
 
-    output = llm(
+    output: dict[str, Any] = cast(dict[str, Any], llm(
         "Q: What is the capital of France? A:",
         max_tokens=100,
         temperature=0.5,
-    )
+    ))
 
     gen_end = time.time()
 
@@ -559,7 +563,7 @@ def perform_surgery(recipe: ModelRecipe) -> ExperimentResult:
         )
 
 
-def main():
+def main() -> None:
     """Worker entry point.
 
     Reads ModelRecipe from stdin, performs surgery, outputs ExperimentResult.
