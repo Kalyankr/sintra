@@ -161,6 +161,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use rule-based routing instead of LLM",
     )
+    group_agentic.add_argument(
+        "--no-experts",
+        action="store_true",
+        help="Disable multi-agent expert collaboration",
+    )
 
     # Evaluation Settings (baseline comparison enabled by default)
     group_eval = parser.add_argument_group("Evaluation Settings")
@@ -194,6 +199,20 @@ def parse_args() -> argparse.Namespace:
         action="count",
         default=0,
         help="Increase output verbosity (-v for info, -vv for debug)",
+    )
+
+    # UI Options
+    group_ui = parser.add_argument_group("UI Options")
+    group_ui.add_argument(
+        "--ui",
+        action="store_true",
+        help="Launch the Gradio web dashboard instead of running optimization",
+    )
+    group_ui.add_argument(
+        "--ui-port",
+        type=int,
+        default=7860,
+        help="Port for the web dashboard",
     )
 
     # Export Options

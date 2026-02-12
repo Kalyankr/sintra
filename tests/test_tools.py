@@ -233,7 +233,7 @@ class TestGetArchitectTools:
         """Should return all architect tools."""
         tools = get_architect_tools()
 
-        assert len(tools) == 5
+        assert len(tools) == 6
         tool_names = [t.name for t in tools]
 
         assert "get_model_architecture" in tool_names
@@ -241,6 +241,7 @@ class TestGetArchitectTools:
         assert "estimate_compression_impact" in tool_names
         assert "query_hardware_capabilities" in tool_names
         assert "lookup_quantization_benchmarks" in tool_names
+        assert "query_community_benchmarks" in tool_names
 
     def test_tools_are_callable(self):
         """All tools should be callable."""

@@ -54,3 +54,6 @@ class SintraState(TypedDict):
 
     # Planner
     optimization_plan: Any | None  # OptimizationPlan from planner node
+
+    # Expert collaboration
+    expert_consensus: Any | None  # ExpertConsensus from expert agents

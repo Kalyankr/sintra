@@ -302,9 +302,8 @@ def run_transformers_benchmark(
         # Accuracy evaluation for BnB/ONNX backends
         accuracy = 0.85  # Default estimate
         try:
-            from sintra.compression.evaluator import AccuracyEvaluator
+            from sintra.compression.evaluator import AccuracyEvaluator  # noqa: F401
 
-            evaluator = AccuracyEvaluator()
             # For transformers-based models, evaluate using the loaded model directly
             eval_prompts = [
                 "The capital of France is",
@@ -325,14 +324,17 @@ def run_transformers_benchmark(
                         do_sample=False,
                         pad_token_id=tokenizer.eos_token_id,
                     )
-                response = tokenizer.decode(
-                    eval_out[0][eval_inputs["input_ids"].shape[1]:],
-                    skip_special_tokens=True,
-                ).strip().lower()
+                response = (
+                    tokenizer.decode(
+                        eval_out[0][eval_inputs["input_ids"].shape[1] :],
+                        skip_special_tokens=True,
+                    )
+                    .strip()
+                    .lower()
+                )
                 # Simple heuristic check
                 if any(
-                    kw in response
-                    for kw in ["paris", "0", "32", "zero", "jupiter"]
+                    kw in response for kw in ["paris", "0", "32", "zero", "jupiter"]
                 ):
                     correct += 1
             accuracy = max(0.5, correct / len(eval_prompts))

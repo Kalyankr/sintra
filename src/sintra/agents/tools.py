@@ -539,6 +539,35 @@ def estimate_compression_impact(
             f"Dropping {layers_to_drop} layers removes {layer_reduction:.0%} of model capacity"
         )
 
+    # Enhance with adaptive learning from history
+    try:
+        from sintra.agents.adaptive import enhance_estimate_with_history
+
+        # Extract model family from caller context if possible
+        model_family = "unknown"
+        result = {
+            "estimated_size_gb": round(final_size, 2),
+            "estimated_tps_range": (
+                round(estimated_tps - tps_variance, 1),
+                round(estimated_tps + tps_variance, 1),
+            ),
+            "estimated_accuracy_loss": round(total_accuracy_loss, 3),
+            "confidence": round(confidence, 2),
+            "reasoning": " | ".join(reasoning_parts)
+            if reasoning_parts
+            else "Standard compression settings",
+            "recommendations": {
+                "safe_for_production": total_accuracy_loss < 0.1,
+                "good_for_edge": final_size < 4.0 and estimated_tps > 20,
+                "needs_evaluation": total_accuracy_loss > 0.15,
+            },
+        }
+        return enhance_estimate_with_history(
+            model_family, target_bits, pruning_ratio, result
+        )
+    except Exception:
+        pass
+
     return {
         "estimated_size_gb": round(final_size, 2),
         "estimated_tps_range": (
@@ -860,10 +889,13 @@ def _lookup_reference_benchmarks(model_family: str, bits: int) -> dict[str, Any]
 
 def get_architect_tools() -> list:
     """Get all tools available to the architect agent."""
+    from sintra.agents.leaderboard import query_community_benchmarks
+
     return [
         get_model_architecture,  # ALWAYS call first to know layer count
         search_similar_models,
         estimate_compression_impact,
         query_hardware_capabilities,
         lookup_quantization_benchmarks,
+        query_community_benchmarks,  # Open LLM Leaderboard
     ]

@@ -11,6 +11,7 @@ from langgraph.graph import END, StateGraph
 # Load environment variables from .env file (if exists)
 load_dotenv()
 
+from sintra.agents.experts import expert_collaboration_node  # noqa: E402
 from sintra.agents.factory import MissingAPIKeyError  # noqa: E402
 from sintra.agents.nodes import (  # noqa: E402
     LLMConnectionError,
@@ -51,12 +52,17 @@ def build_sintra_workflow(
     use_react: bool = False,
     use_reflection: bool = False,
     use_llm_routing: bool = False,
+    use_experts: bool = False,
 ):
     workflow = StateGraph(SintraState)
 
     # Optional: Add planner for strategic optimization
     if use_planner:
         workflow.add_node("planner", planner_node)
+
+    # Optional: Add expert collaboration before architect
+    if use_experts:
+        workflow.add_node("experts", expert_collaboration_node)
 
     # Define the "Actors" - choose architect based on mode
     if use_react:
@@ -73,9 +79,16 @@ def build_sintra_workflow(
         workflow.add_node("reflector", reflector_node)
 
     # Define the "Path"
-    if use_planner:
+    if use_planner and use_experts:
+        workflow.set_entry_point("planner")
+        workflow.add_edge("planner", "experts")
+        workflow.add_edge("experts", "architect")
+    elif use_planner:
         workflow.set_entry_point("planner")
         workflow.add_edge("planner", "architect")
+    elif use_experts:
+        workflow.set_entry_point("experts")
+        workflow.add_edge("experts", "architect")
     else:
         workflow.set_entry_point("architect")
 
@@ -157,6 +170,19 @@ def main():
     # Handle --list-checkpoints
     if args.list_checkpoints:
         _list_checkpoints()
+        return
+
+    # Handle --ui flag (launch web dashboard)
+    if getattr(args, "ui", False):
+        from sintra.ui.dashboard import check_gradio_available, create_dashboard
+
+        if not check_gradio_available():
+            console.print("\n[bold red]Gradio not installed.[/bold red]")
+            console.print("Install with: [cyan]pip install sintra[ui][/cyan]")
+            console.print("Or: [cyan]pip install gradio>=4.0.0[/cyan]")
+            sys.exit(1)
+        port = getattr(args, "ui_port", 7860)
+        create_dashboard(port=port)
         return
 
     # Setup progress reporter
@@ -290,6 +316,7 @@ def main():
             "reflection": None,
             "strategy_adjustments": None,
             "optimization_plan": None,
+            "expert_consensus": None,
         }
     else:
         # Update resumed state with current session settings
@@ -304,6 +331,7 @@ def main():
     use_react = not use_simple and not getattr(args, "no_react", False)
     use_reflect = not use_simple and not getattr(args, "no_reflect", False)
     use_llm_routing = not use_simple and not getattr(args, "no_llm_routing", False)
+    use_experts = not use_simple and not getattr(args, "no_experts", False)
 
     log_transition(
         "System", f"Ready. Target: {profile.name} | Brain: {args.model}", "hw.profile"
@@ -324,6 +352,8 @@ def main():
             active_features.append("reflection")
         if use_llm_routing:
             active_features.append("LLM-routing")
+        if use_experts:
+            active_features.append("multi-agent")
         if active_features:
             log_transition(
                 "System", f"Agentic mode: {', '.join(active_features)}", "arch.node"
@@ -337,6 +367,7 @@ def main():
         use_react=use_react,
         use_reflection=use_reflect,
         use_llm_routing=use_llm_routing,
+        use_experts=use_experts,
     )
 
     # Streaming the graph for real-time console updates
